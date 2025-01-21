@@ -10,7 +10,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "lora.h"
+#include "tef/lora.h"
 
 #if CONFIG_SENDER
 void task_tx(void *pvParameters) {
@@ -19,9 +19,9 @@ void task_tx(void *pvParameters) {
   while (1) {
     TickType_t nowTick = xTaskGetTickCount();
     int send_len = sprintf((char *)buf, "Hello World!! %" PRIu32, nowTick);
-    lora::sendPacket(buf, send_len);
+    tef::lora::sendPacket(buf, send_len);
     ESP_LOGI(pcTaskGetName(NULL), "%d byte packet sent...", send_len);
-    int lost = lora::packetLost();
+    int lost = tef::lora::packetLost();
     if (lost != 0) {
       ESP_LOGW(pcTaskGetName(NULL), "%d packets lost", lost);
     }
@@ -35,9 +35,9 @@ void task_rx(void *pvParameters) {
   ESP_LOGI(pcTaskGetName(NULL), "Start");
   uint8_t buf[256];  // Maximum Payload size of SX1276/77/78/79 is 255
   while (1) {
-    lora::receive();  // put into receive mode
-    if (lora::received()) {
-      int rxLen = lora::receivePacket(buf, sizeof(buf));
+    tef::lora::receive();  // put into receive mode
+    if (tef::lora::received()) {
+      int rxLen = tef::lora::receivePacket(buf, sizeof(buf));
       ESP_LOGI(
         pcTaskGetName(NULL), "%d byte packet received:[%.*s]", rxLen, rxLen,
         buf);
@@ -48,7 +48,7 @@ void task_rx(void *pvParameters) {
 #endif  // CONFIG_RECEIVER
 
 extern "C" void app_main() {
-  if (lora::init() == 0) {
+  if (tef::lora::init() == 0) {
     ESP_LOGE(pcTaskGetName(NULL), "Does not recognize the module");
     while (1) {
       vTaskDelay(1);
@@ -57,20 +57,20 @@ extern "C" void app_main() {
 
 #if CONFIG_433MHZ
   ESP_LOGI(pcTaskGetName(NULL), "Frequency is 433MHz");
-  lora::setFrequency(433e6);  // 433MHz
+  tef::lora::setFrequency(433e6);  // 433MHz
 #elif CONFIG_866MHZ
   ESP_LOGI(pcTaskGetName(NULL), "Frequency is 866MHz");
-  lora::setFrequency(866e6);  // 866MHz
+  tef::lora::setFrequency(866e6);  // 866MHz
 #elif CONFIG_915MHZ
   ESP_LOGI(pcTaskGetName(NULL), "Frequency is 915MHz");
-  lora::setFrequency(915e6);  // 915MHz
+  tef::lora::setFrequency(915e6);  // 915MHz
 #elif CONFIG_OTHER
   ESP_LOGI(pcTaskGetName(NULL), "Frequency is %dMHz", CONFIG_OTHER_FREQUENCY);
   long frequency = CONFIG_OTHER_FREQUENCY * 1000000;
-  lora::setFrequency(frequency);
+  tef::lora::setFrequency(frequency);
 #endif
 
-  lora::enableCrc();
+  tef::lora::enableCrc();
 
   int cr = 1;
   int bw = 7;
@@ -81,18 +81,18 @@ extern "C" void app_main() {
   sf = CONFIG_SF_RATE;
 #endif
 
-  lora::setCodingRate(cr);
-  // lora::setCodingRate(CONFIG_CODING_RATE);
+  tef::lora::setCodingRate(cr);
+  // tef::lora::setCodingRate(CONFIG_CODING_RATE);
   // cr = lora::getCodingRate();
   ESP_LOGI(pcTaskGetName(NULL), "coding_rate=%d", cr);
 
-  lora::setBandwidth(bw);
-  // lora::setBandwidth(CONFIG_BANDWIDTH);
+  tef::lora::setBandwidth(bw);
+  // tef::lora::setBandwidth(CONFIG_BANDWIDTH);
   // int bw = lora::getBandwidth();
   ESP_LOGI(pcTaskGetName(NULL), "bandwidth=%d", bw);
 
-  lora::setSpreadingFactor(sf);
-  // lora::setSpreadingFactor(CONFIG_SF_RATE);
+  tef::lora::setSpreadingFactor(sf);
+  // tef::lora::setSpreadingFactor(CONFIG_SF_RATE);
   // int sf = lora::getSpreadingFactor();
   ESP_LOGI(pcTaskGetName(NULL), "spreading_factor=%d", sf);
 

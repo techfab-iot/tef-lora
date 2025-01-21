@@ -24,7 +24,7 @@ void setSyncWord(int sw);
 void enableCrc(void);
 void disableCrc(void);
 int init(void);
-void loraSendPacket(uint8_t *buf, int size);
+void sendPacket(uint8_t *buf, int size);
 int receivePacket(uint8_t *buf, int size);
 int received(void);
 int packetLost(void);
