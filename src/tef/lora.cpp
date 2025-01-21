@@ -82,7 +82,7 @@ static constexpr bool kBufferIo = true;
  * Write a value to a register.  * @param reg Register index.
  * @param val Value to write.
  */
-void lora_write_reg(int reg, int val) {
+void writeReg(int reg, int val) {
   uint8_t out[2];
   out[0] = 0x80 | reg;
   out[1] = val;
@@ -109,7 +109,7 @@ void lora_write_reg(int reg, int val) {
  * @param val Value to write.
  * @param len Byte length to write.
  */
-void lora_write_reg_buffer(int reg, uint8_t *val, int len) {
+void writeRegBuffer(int reg, uint8_t *val, int len) {
   uint8_t *out;
   out = (uint8_t *)malloc(len + 1);
   out[0] = 0x80 | reg;
@@ -137,7 +137,7 @@ void lora_write_reg_buffer(int reg, uint8_t *val, int len) {
  * @param reg Register index.
  * @return Value of the register.
  */
-int lora_read_reg(int reg) {
+int readReg(int reg) {
   uint8_t out[2];
   out[0] = reg;
   out[1] = 0xff;
@@ -164,7 +164,7 @@ int lora_read_reg(int reg) {
  * @return Value of the register.
  * @param len Byte length to read.
  */
-void lora_read_reg_buffer(int reg, uint8_t *val, int len) {
+void readRegBuffer(int reg, uint8_t *val, int len) {
   uint8_t *out;
   uint8_t *in;
   out = (uint8_t *)malloc(len + 1);
@@ -196,7 +196,7 @@ void lora_read_reg_buffer(int reg, uint8_t *val, int len) {
 /**
  * Perform physical reset on the Lora chip
  */
-void lora_reset(void) {
+void reset(void) {
   gpio_set_level((gpio_num_t)CONFIG_RST_GPIO, 0);
   vTaskDelay(pdMS_TO_TICKS(1));
   gpio_set_level((gpio_num_t)CONFIG_RST_GPIO, 1);
@@ -207,9 +207,9 @@ void lora_reset(void) {
  * Configure explicit header mode.
  * Packet size will be included in the frame.
  */
-void lora_explicit_header_mode(void) {
+void explicitHeaderMode(void) {
   _implicit = 0;
-  lora_write_reg(kRegModemConfig1, lora_read_reg(kRegModemConfig1) & 0xfe);
+  writeReg(kRegModemConfig1, readReg(kRegModemConfig1) & 0xfe);
 }
 
 /**
@@ -217,102 +217,95 @@ void lora_explicit_header_mode(void) {
  * All packets will have a predefined size.
  * @param size Size of the packets.
  */
-void lora_implicit_header_mode(int size) {
+void implicitHeaderMode(int size) {
   _implicit = 1;
-  lora_write_reg(kRegModemConfig1, lora_read_reg(kRegModemConfig1) | 0x01);
-  lora_write_reg(kRegPayloadLength, size);
+  writeReg(kRegModemConfig1, readReg(kRegModemConfig1) | 0x01);
+  writeReg(kRegPayloadLength, size);
 }
 
 /**
  * Sets the radio transceiver in idle mode.
  * Must be used to change registers and access the FIFO.
  */
-void lora_idle(void) {
-  lora_write_reg(kRegOpMode, kModeLongRangeMode | kModeStdby);
-}
+void idle(void) { writeReg(kRegOpMode, kModeLongRangeMode | kModeStdby); }
 
 /**
  * Sets the radio transceiver in sleep mode.
  * Low power consumption and FIFO is lost.
  */
-void lora_sleep(void) {
-  lora_write_reg(kRegOpMode, kModeLongRangeMode | kModeSleep);
-}
+void sleep(void) { writeReg(kRegOpMode, kModeLongRangeMode | kModeSleep); }
 
 /**
  * Sets the radio transceiver in receive mode.
  * Incoming packets will be received.
  */
-void lora_receive(void) {
-  lora_write_reg(kRegOpMode, kModeLongRangeMode | kModeRxContinuous);
+void receive(void) {
+  writeReg(kRegOpMode, kModeLongRangeMode | kModeRxContinuous);
 }
 
 /**
  * Configure power level for transmission
  * @param level 2-17, from least to most power
  */
-void lora_set_tx_power(int level) {
+void setTxPower(int level) {
   // RF9x module uses kPaBoost pin
   if (level < 2)
     level = 2;
   else if (level > 17)
     level = 17;
-  lora_write_reg(kRegPaConfig, kPaBoost | (level - 2));
+  writeReg(kRegPaConfig, kPaBoost | (level - 2));
 }
 
 /**
  * Set carrier frequency.
  * @param frequency Frequency in Hz
  */
-void lora_set_frequency(long frequency) {
+void setFrequency(long frequency) {
   _frequency = frequency;
 
   uint64_t frf = ((uint64_t)frequency << 19) / 32000000;
 
-  lora_write_reg(kRegFrfMsb, (uint8_t)(frf >> 16));
-  lora_write_reg(kRegFrfMid, (uint8_t)(frf >> 8));
-  lora_write_reg(kRegFrfLsb, (uint8_t)(frf >> 0));
+  writeReg(kRegFrfMsb, (uint8_t)(frf >> 16));
+  writeReg(kRegFrfMid, (uint8_t)(frf >> 8));
+  writeReg(kRegFrfLsb, (uint8_t)(frf >> 0));
 }
 
 /**
  * Set spreading factor.
  * @param sf 6-12, Spreading factor to use.
  */
-void lora_set_spreading_factor(int sf) {
+void setSpreadingFactor(int sf) {
   if (sf < 6)
     sf = 6;
   else if (sf > 12)
     sf = 12;
 
   if (sf == 6) {
-    lora_write_reg(kRegDetectionOptimize, 0xc5);
-    lora_write_reg(kRegDetectionThreshold, 0x0c);
+    writeReg(kRegDetectionOptimize, 0xc5);
+    writeReg(kRegDetectionThreshold, 0x0c);
   } else {
-    lora_write_reg(kRegDetectionOptimize, 0xc3);
-    lora_write_reg(kRegDetectionThreshold, 0x0a);
+    writeReg(kRegDetectionOptimize, 0xc3);
+    writeReg(kRegDetectionThreshold, 0x0a);
   }
 
-  lora_write_reg(
-    kRegModemConfig2,
-    (lora_read_reg(kRegModemConfig2) & 0x0f) | ((sf << 4) & 0xf0));
+  writeReg(
+    kRegModemConfig2, (readReg(kRegModemConfig2) & 0x0f) | ((sf << 4) & 0xf0));
   _sf = sf;
 }
 
 /**
  * Get spreading factor.
  */
-int lora_get_spreading_factor(void) {
-  return (lora_read_reg(kRegModemConfig2) >> 4);
-}
+int getSpreadingFactor(void) { return (readReg(kRegModemConfig2) >> 4); }
 
 /**
  * Set Mapping of pins DIO0 to DIO5
  * @param dio Number of DIO(0 to 5)
  * @param mode mode of DIO(0 to 3)
  */
-void lora_set_dio_mapping(int dio, int mode) {
+void setDioMapping(int dio, int mode) {
   if (dio < 4) {
-    int _mode = lora_read_reg(kRegDioMapping1);
+    int _mode = readReg(kRegDioMapping1);
     if (dio == 0) {
       _mode = _mode & 0x3F;
       _mode = _mode | (mode << 6);
@@ -326,10 +319,10 @@ void lora_set_dio_mapping(int dio, int mode) {
       _mode = _mode & 0xFC;
       _mode = _mode | mode;
     }
-    lora_write_reg(kRegDioMapping1, _mode);
+    writeReg(kRegDioMapping1, _mode);
     ESP_LOGD(kLogTag, "kRegDioMapping1=0x%02x", _mode);
   } else if (dio < 6) {
-    int _mode = lora_read_reg(kRegDioMapping2);
+    int _mode = readReg(kRegDioMapping2);
     if (dio == 4) {
       _mode = _mode & 0x3F;
       _mode = _mode | (mode << 6);
@@ -338,7 +331,7 @@ void lora_set_dio_mapping(int dio, int mode) {
       _mode = _mode | (mode << 4);
     }
     ESP_LOGD(kLogTag, "kRegDioMapping2=0x%02x", _mode);
-    lora_write_reg(kRegDioMapping2, _mode);
+    writeReg(kRegDioMapping2, _mode);
   }
 }
 
@@ -346,9 +339,9 @@ void lora_set_dio_mapping(int dio, int mode) {
  * Get Mapping of pins DIO0 to DIO5
  * @param dio Number of DIO(0 to 5)
  */
-int lora_get_dio_mapping(int dio) {
+int getDioMapping(int dio) {
   if (dio < 4) {
-    int _mode = lora_read_reg(kRegDioMapping1);
+    int _mode = readReg(kRegDioMapping1);
     ESP_LOGD(kLogTag, "kRegDioMapping1=0x%02x", _mode);
     if (dio == 0) {
       return ((_mode >> 6) & 0x03);
@@ -360,7 +353,7 @@ int lora_get_dio_mapping(int dio) {
       return (_mode & 0x03);
     }
   } else if (dio < 6) {
-    int _mode = lora_read_reg(kRegDioMapping2);
+    int _mode = readReg(kRegDioMapping2);
     ESP_LOGD(kLogTag, "kRegDioMapping2=0x%02x", _mode);
     if (dio == 4) {
       return ((_mode >> 6) & 0x03);
@@ -375,10 +368,9 @@ int lora_get_dio_mapping(int dio) {
  * Set bandwidth (bit rate)
  * @param sbw Signal bandwidth(0 to 9)
  */
-void lora_set_bandwidth(int sbw) {
+void setBandwidth(int sbw) {
   if (sbw < 10) {
-    lora_write_reg(
-      kRegModemConfig1, (lora_read_reg(kRegModemConfig1) & 0x0f) | (sbw << 4));
+    writeReg(kRegModemConfig1, (readReg(kRegModemConfig1) & 0x0f) | (sbw << 4));
     _sbw = sbw;
   }
 }
@@ -387,20 +379,20 @@ void lora_set_bandwidth(int sbw) {
  * Get bandwidth (bit rate)
  * @param sbw Signal bandwidth(0 to 9)
  */
-int lora_get_bandwidth(void) {
+int getBandwidth(void) {
   // int bw;
-  // bw = lora_read_reg(kRegModemConfig1) & 0xf0;
+  // bw = readReg(kRegModemConfig1) & 0xf0;
   // ESP_LOGD(kLogTag, "bw=0x%02x", bw);
   // bw = bw >> 4;
   // return bw;
-  return ((lora_read_reg(kRegModemConfig1) & 0xf0) >> 4);
+  return ((readReg(kRegModemConfig1) & 0xf0) >> 4);
 }
 
 /**
  * Set coding rate
  * @param cr Coding Rate(1 to 4)
  */
-void lora_set_coding_rate(int cr) {
+void setCodingRate(int cr) {
   // if (denominator < 5) denominator = 5;
   // else if (denominator > 8) denominator = 8;
 
@@ -409,34 +401,31 @@ void lora_set_coding_rate(int cr) {
     cr = 1;
   else if (cr > 4)
     cr = 4;
-  lora_write_reg(
-    kRegModemConfig1, (lora_read_reg(kRegModemConfig1) & 0xf1) | (cr << 1));
+  writeReg(kRegModemConfig1, (readReg(kRegModemConfig1) & 0xf1) | (cr << 1));
   _cr = cr;
 }
 
 /**
  * Get coding rate
  */
-int lora_get_coding_rate(void) {
-  return ((lora_read_reg(kRegModemConfig1) & 0x0E) >> 1);
-}
+int getCodingRate(void) { return ((readReg(kRegModemConfig1) & 0x0E) >> 1); }
 
 /**
  * Set the size of preamble.
  * @param length Preamble length in symbols.
  */
-void lora_set_preamble_length(long length) {
-  lora_write_reg(kRegPreambleMsb, (uint8_t)(length >> 8));
-  lora_write_reg(kRegPreambleLsb, (uint8_t)(length >> 0));
+void setPreambleLength(long length) {
+  writeReg(kRegPreambleMsb, (uint8_t)(length >> 8));
+  writeReg(kRegPreambleLsb, (uint8_t)(length >> 0));
 }
 
 /**
  * Get the size of preamble.
  */
-long lora_get_preamble_length(void) {
+long getPreambleLength(void) {
   long preamble;
-  preamble = lora_read_reg(kRegPreambleMsb) << 8;
-  preamble = preamble + lora_read_reg(kRegPreambleLsb);
+  preamble = readReg(kRegPreambleMsb) << 8;
+  preamble = preamble + readReg(kRegPreambleLsb);
   return preamble;
 }
 
@@ -444,26 +433,26 @@ long lora_get_preamble_length(void) {
  * Change radio sync word.
  * @param sw New sync word to use.
  */
-void lora_set_sync_word(int sw) { lora_write_reg(kRegSyncWord, sw); }
+void setSyncWord(int sw) { writeReg(kRegSyncWord, sw); }
 
 /**
  * Enable appending/verifying packet CRC.
  */
-void lora_enable_crc(void) {
-  lora_write_reg(kRegModemConfig2, lora_read_reg(kRegModemConfig2) | 0x04);
+void enableCrc(void) {
+  writeReg(kRegModemConfig2, readReg(kRegModemConfig2) | 0x04);
 }
 
 /**
  * Disable appending/verifying packet CRC.
  */
-void lora_disable_crc(void) {
-  lora_write_reg(kRegModemConfig2, lora_read_reg(kRegModemConfig2) & 0xfb);
+void disableCrc(void) {
+  writeReg(kRegModemConfig2, readReg(kRegModemConfig2) & 0xfb);
 }
 
 /**
  * Perform hardware initialization.
  */
-int lora_init(void) {
+int init(void) {
   esp_err_t ret;
 
   /*
@@ -501,7 +490,7 @@ int lora_init(void) {
   /*
    * Perform hardware reset.
    */
-  lora_reset();
+  reset();
 
   /*
    * Check version.
@@ -509,7 +498,7 @@ int lora_init(void) {
   uint8_t version;
   uint8_t i = 0;
   while (i++ < kTimeoutReset) {
-    version = lora_read_reg(kRegVersion);
+    version = readReg(kRegVersion);
     ESP_LOGD(kLogTag, "version=0x%02x", version);
     if (version == 0x12) break;
     vTaskDelay(2);
@@ -522,14 +511,14 @@ int lora_init(void) {
   /*
    * Default configuration.
    */
-  lora_sleep();
-  lora_write_reg(kRegFifoRxBaseAddr, 0);
-  lora_write_reg(kRegFifoTxBaseAddr, 0);
-  lora_write_reg(kRegLna, lora_read_reg(kRegLna) | 0x03);
-  lora_write_reg(kRegModemConfig3, 0x04);
-  lora_set_tx_power(17);
+  sleep();
+  writeReg(kRegFifoRxBaseAddr, 0);
+  writeReg(kRegFifoTxBaseAddr, 0);
+  writeReg(kRegLna, readReg(kRegLna) | 0x03);
+  writeReg(kRegModemConfig3, 0x04);
+  setTxPower(17);
 
-  lora_idle();
+  idle();
   return 1;
 }
 
@@ -538,26 +527,26 @@ int lora_init(void) {
  * @param buf Data to be sent
  * @param size Size of data.
  */
-void lora_send_packet(uint8_t *buf, int size) {
+void sendPacket(uint8_t *buf, int size) {
   /*
    * Transfer data to radio.
    */
-  lora_idle();
-  lora_write_reg(kRegFifoAddrPtr, 0);
+  idle();
+  writeReg(kRegFifoAddrPtr, 0);
 
   if (kBufferIo == true)
-    lora_write_reg_buffer(kRegFifo, buf, size);
+    writeRegBuffer(kRegFifo, buf, size);
   else
-    for (int i = 0; i < size; i++) lora_write_reg(kRegFifo, *buf++);
+    for (int i = 0; i < size; i++) writeReg(kRegFifo, *buf++);
 
-  lora_write_reg(kRegPayloadLength, size);
+  writeReg(kRegPayloadLength, size);
 
   /*
    * Start transmission and wait for conclusion.
    */
-  lora_write_reg(kRegOpMode, kModeLongRangeMode | kModeTx);
+  writeReg(kRegOpMode, kModeLongRangeMode | kModeTx);
 #if 0
-   while((lora_read_reg(kRegIrqFlags) & kIrqTxDoneMask) == 0)
+   while((readReg(kRegIrqFlags) & kIrqTxDoneMask) == 0)
       vTaskDelay(2);
 #endif
   int loop = 0;
@@ -575,8 +564,8 @@ void lora_send_packet(uint8_t *buf, int size) {
   }
   ESP_LOGD(kLogTag, "_sbw=%d max_retry=%d", _sbw, max_retry);
   while (1) {
-    int irq = lora_read_reg(kRegIrqFlags);
-    ESP_LOGD(kLogTag, "lora_read_reg=0x%x", irq);
+    int irq = readReg(kRegIrqFlags);
+    ESP_LOGD(kLogTag, "readReg=0x%x", irq);
     if ((irq & kIrqTxDoneMask) == kIrqTxDoneMask) break;
     loop++;
     if (loop == max_retry) break;
@@ -586,7 +575,7 @@ void lora_send_packet(uint8_t *buf, int size) {
     _send_packet_lost++;
     ESP_LOGE(kLogTag, "lora_send_packet Fail");
   }
-  lora_write_reg(kRegIrqFlags, kIrqTxDoneMask);
+  writeReg(kRegIrqFlags, kIrqTxDoneMask);
 }
 
 /**
@@ -595,14 +584,14 @@ void lora_send_packet(uint8_t *buf, int size) {
  * @param size Available size in buffer (bytes).
  * @return Number of bytes received (zero if no packet available).
  */
-int lora_receive_packet(uint8_t *buf, int size) {
+int receivePacket(uint8_t *buf, int size) {
   int len = 0;
 
   /*
    * Check interrupts.
    */
-  int irq = lora_read_reg(kRegIrqFlags);
-  lora_write_reg(kRegIrqFlags, irq);
+  int irq = readReg(kRegIrqFlags);
+  writeReg(kRegIrqFlags, irq);
   if ((irq & kIrqRxDoneMask) == 0) return 0;
   if (irq & kIrqPayloadCrcErrorMask) return 0;
 
@@ -610,20 +599,20 @@ int lora_receive_packet(uint8_t *buf, int size) {
    * Find packet size.
    */
   if (_implicit)
-    len = lora_read_reg(kRegPayloadLength);
+    len = readReg(kRegPayloadLength);
   else
-    len = lora_read_reg(kRegRxNbBytes);
+    len = readReg(kRegRxNbBytes);
 
   /*
    * Transfer data from radio.
    */
-  lora_idle();
-  lora_write_reg(kRegFifoAddrPtr, lora_read_reg(kRegFifoRxCurrentAddr));
+  idle();
+  writeReg(kRegFifoAddrPtr, readReg(kRegFifoRxCurrentAddr));
   if (len > size) len = size;
   if (kBufferIo == true)
-    lora_read_reg_buffer(kRegFifo, buf, len);
+    readRegBuffer(kRegFifo, buf, len);
   else
-    for (int i = 0; i < len; i++) *buf++ = lora_read_reg(kRegFifo);
+    for (int i = 0; i < len; i++) *buf++ = readReg(kRegFifo);
 
   return len;
 }
@@ -631,41 +620,39 @@ int lora_receive_packet(uint8_t *buf, int size) {
 /**
  * Returns non-zero if there is data to read (packet received).
  */
-int lora_received(void) {
-  if (lora_read_reg(kRegIrqFlags) & kIrqRxDoneMask) return 1;
+int received(void) {
+  if (readReg(kRegIrqFlags) & kIrqRxDoneMask) return 1;
   return 0;
 }
 
 /**
  * Returns RegIrqFlags.
  */
-int lora_get_irq(void) { return (lora_read_reg(kRegIrqFlags)); }
+int getIrq(void) { return (readReg(kRegIrqFlags)); }
 
 /**
  * Return lost send packet count.
  */
-int lora_packet_lost(void) { return (_send_packet_lost); }
+int packetLost(void) { return (_send_packet_lost); }
 
 /**
  * Return last packet's RSSI.
  */
-int lora_packet_rssi(void) {
-  return (lora_read_reg(kRegPktRssiValue) - (_frequency < 868E6 ? 164 : 157));
+int packetRssi(void) {
+  return (readReg(kRegPktRssiValue) - (_frequency < 868E6 ? 164 : 157));
 }
 
 /**
  * Return last packet's SNR (signal to noise ratio).
  */
-float lora_packet_snr(void) {
-  return ((int8_t)lora_read_reg(kRegPktSnrValue)) * 0.25;
-}
+float packetSnr(void) { return ((int8_t)readReg(kRegPktSnrValue)) * 0.25; }
 
 /**
  * Shutdown hardware.
  */
-void lora_close(void) {
-  lora_sleep();
-  //   close(__spi);  FIXME: end hardware features after lora_close
+void close(void) {
+  sleep();
+  //   close(__spi);  FIXME: end hardware features after close
   //   close(__cs);
   //   close(__rst);
   //   _spi = -1;
@@ -673,11 +660,11 @@ void lora_close(void) {
   //   __rst = -1;
 }
 
-void lora_dump_registers(void) {
+void dumpRegisters(void) {
   int i;
   printf("00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F\n");
   for (i = 0; i < 0x40; i++) {
-    printf("%02X ", lora_read_reg(i));
+    printf("%02X ", readReg(i));
     if ((i & 0x0f) == 0x0f) printf("\n");
   }
   printf("\n");
