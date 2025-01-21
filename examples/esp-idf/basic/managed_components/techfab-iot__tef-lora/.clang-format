@@ -1,5 +1,0 @@
-BasedOnStyle: Google
-AlignAfterOpenBracket: AlwaysBreak
-AllowAllArgumentsOnNextLine: true
-AllowAllParametersOfDeclarationOnNextLine: true
-ContinuationIndentWidth: 2
