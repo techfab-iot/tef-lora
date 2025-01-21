@@ -63,7 +63,7 @@ static constexpr spi_host_device_t kHostId = SPI2_HOST;
 static constexpr spi_host_device_t kHostId = SPI3_HOST;
 #endif
 
-static spi_device_handle_t _spi;
+static spi_device_handle_t _spi = {0};
 static int _implicit;
 static long _frequency;
 static int _send_packet_lost = 0;
@@ -88,7 +88,7 @@ void writeReg(int reg, int val) {
   out[1] = val;
   uint8_t in[2];
 
-  spi_transaction_t t;
+  spi_transaction_t t = {0};
   t.flags = 0;
   t.length = 8 * sizeof(out);
   t.tx_buffer = out;
@@ -117,7 +117,7 @@ void writeRegBuffer(int reg, uint8_t *val, int len) {
     out[i + 1] = val[i];
   }
 
-  spi_transaction_t t;
+  spi_transaction_t t = {0};
   t.flags = 0;
   t.length = 8 * (len + 1);
   t.tx_buffer = out;
@@ -143,7 +143,7 @@ int readReg(int reg) {
   out[1] = 0xff;
   uint8_t in[2];
 
-  spi_transaction_t t;
+  spi_transaction_t t = {0};
   t.flags = 0;
   t.length = 8 * sizeof(out);
   t.tx_buffer = out;
@@ -174,7 +174,7 @@ void readRegBuffer(int reg, uint8_t *val, int len) {
     out[i + 1] = 0xff;
   }
 
-  spi_transaction_t t;
+  spi_transaction_t t = {0};
   t.flags = 0;
   t.length = 8 * (len + 1);
   t.tx_buffer = out;
@@ -464,7 +464,7 @@ int init(void) {
   gpio_set_direction((gpio_num_t)CONFIG_CS_GPIO, GPIO_MODE_OUTPUT);
   gpio_set_level((gpio_num_t)CONFIG_CS_GPIO, 1);
 
-  spi_bus_config_t bus;
+  spi_bus_config_t bus = {0};
   bus.mosi_io_num = CONFIG_MOSI_GPIO;
   bus.miso_io_num = CONFIG_MISO_GPIO;
   bus.sclk_io_num = CONFIG_SCK_GPIO;
@@ -476,7 +476,7 @@ int init(void) {
   ret = spi_bus_initialize(kHostId, &bus, SPI_DMA_CH_AUTO);
   assert(ret == ESP_OK);
 
-  spi_device_interface_config_t dev;
+  spi_device_interface_config_t dev = {0};
   dev.mode = 0;
   dev.clock_speed_hz = 9000000;
   dev.spics_io_num = CONFIG_CS_GPIO;

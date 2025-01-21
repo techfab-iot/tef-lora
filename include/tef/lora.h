@@ -31,7 +31,6 @@ int packetLost(void);
 int packetRssi(void);
 float packetSnr(void);
 void close(void);
-int initialized(void);
 void dumpRegisters(void);
 
 }  // namespace tef::lora
