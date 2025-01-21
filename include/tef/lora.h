@@ -1,4 +1,6 @@
 #pragma once
+#include <stdint.h>
+
 namespace tef::lora {
 
 void reset(void);
