@@ -1,0 +1,9 @@
+examples/*/.vscode
+examples/*/build
+examples/*/main/certs/*
+examples/*/dependencies.lock
+examples/*/sdkconfig
+examples/*/sdkconfig.old
+examples/*/managed_components
+.vscode
+build
