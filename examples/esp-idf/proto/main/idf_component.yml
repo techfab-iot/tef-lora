@@ -1,0 +1,7 @@
+dependencies:
+  techfab-iot/tef-lora:
+    git: git@github.com:techfab-iot/tef-lora.git
+    version: 0.0.2
+  vitor-mariano/c-proto:
+    git: git@github.com:vitor-mariano/c-proto.git
+    version: 0.10.1
