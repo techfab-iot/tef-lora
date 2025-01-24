@@ -1,60 +1,32 @@
-/* The example of ESP-IDF
- *
- * This sample code is in the public domain.
- */
-
 #include <inttypes.h>
 #include <stdio.h>
 
 #include <string>
 #include <vector>
 
-#include "base64.h"
 #include "driver/temperature_sensor.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "proto/telemetry/telemetry.pb-c.h"
 #include "tef/lora.h"
+#include "tef/proto.h"
 #include "time.h"
+#include "utils/base64.h"
 
 float internal_temperature = 0;
 
 const char *kLogTag = "main";
 
-void createRecord(
-  Telemetry__Record *record, Telemetry__Resource resource, double value,
-  time_t time) {
-  record->resource = resource;
-  record->value = value;
-  record->time = time;
-}
 std::string payload_packet = "";
 
 void sendPacket() {
-  std::vector<Telemetry__Record *> records;
-
-  Telemetry__Record mcu_temperature_record = TELEMETRY__RECORD__INIT;
+  tef::proto::addRecord(
+    TELEMETRY__RESOURCE__RESOURCE_INTERNAL_TEMPERATURE, internal_temperature);
   ESP_LOGI(kLogTag, "Internal temperature record added");
-  createRecord(
-    &mcu_temperature_record, TELEMETRY__RESOURCE__RESOURCE_INTERNAL_TEMPERATURE,
-    (double)internal_temperature, (time_t)1737680282);
-  records.push_back(&mcu_temperature_record);
 
-  Telemetry__TelemetryPack telemetry_pack = TELEMETRY__TELEMETRY_PACK__INIT;
-  telemetry_pack.records = records.data();
-  ESP_LOGI(kLogTag, "Records size: %d", records.size());
-  telemetry_pack.n_records = records.size();
-  std::vector<uint8_t> payload(
-    telemetry__telemetry_pack__get_packed_size(&telemetry_pack));
-  telemetry__telemetry_pack__pack(&telemetry_pack, payload.data());
-  ESP_LOGI(kLogTag, "Packet of size %dB to be sent in binary:", payload.size());
-  ESP_LOG_BUFFER_HEXDUMP(
-    kLogTag, payload.data(), payload.size(), ESP_LOG_DEBUG);
-
-  std::string base = base64_encode(
-    reinterpret_cast<unsigned char const *>(payload.data()), payload.size(),
-    false);
+  std::vector<uint8_t> payload = tef::proto::createPack();
+  auto base = tef::proto::encodePack(payload);
   if (base.empty()) {
     ESP_LOGW(kLogTag, "Packet not sent, it's empty!");
     return;
@@ -65,9 +37,9 @@ void sendPacket() {
   tef::lora::sendPacket(
     reinterpret_cast<uint8_t *>(payload_packet.data()), payload_packet.size());
   int lost = tef::lora::packetLost();
-  if (lost != 0) {
-    ESP_LOGW(pcTaskGetName(NULL), "%d packets lost", lost);
-  }
+  if (lost != 0) ESP_LOGW(pcTaskGetName(NULL), "%d packets lost", lost);
+
+  tef::proto::clearRecords();
 }
 
 void sensorsTask(void *arg) {
@@ -92,39 +64,17 @@ void sensorsTask(void *arg) {
   vTaskDelete(NULL);
 }
 
-#if CONFIG_SENDER
-void task_tx(void *pvParameters) {
-  ESP_LOGI(pcTaskGetName(NULL), "Start");
-  uint8_t buf[256];  // Maximum Payload size of SX1276/77/78/79 is 255
+void txTask(void *pvParameters) {
+  ESP_LOGI(kLogTag, "Start");
   while (1) {
-    TickType_t nowTick = xTaskGetTickCount();
     if (internal_temperature > 0) sendPacket();
-
     vTaskDelay(pdMS_TO_TICKS(60000));
-  }  // end while
+  }
 }
-#endif  // CONFIG_SENDER
-
-#if CONFIG_RECEIVER
-void task_rx(void *pvParameters) {
-  ESP_LOGI(pcTaskGetName(NULL), "Start");
-  uint8_t buf[256];  // Maximum Payload size of SX1276/77/78/79 is 255
-  while (1) {
-    tef::lora::receive();  // put into receive mode
-    if (tef::lora::received()) {
-      int rxLen = tef::lora::receivePacket(buf, sizeof(buf));
-      ESP_LOGI(
-        pcTaskGetName(NULL), "%d byte packet received:[%.*s]", rxLen, rxLen,
-        buf);
-    }
-    vTaskDelay(1);  // Avoid WatchDog alerts
-  }  // end while
-}
-#endif  // CONFIG_RECEIVER
 
 extern "C" void app_main() {
   if (tef::lora::init() == 0) {
-    ESP_LOGE(pcTaskGetName(NULL), "Does not recognize the module");
+    ESP_LOGE(kLogTag, "Does not recognize the module... wrong gpio pins?");
     while (1) {
       vTaskDelay(1);
     }
@@ -157,25 +107,15 @@ extern "C" void app_main() {
 #endif
 
   tef::lora::setCodingRate(cr);
-  // tef::lora::setCodingRate(CONFIG_CODING_RATE);
-  // cr = lora::getCodingRate();
   ESP_LOGI(pcTaskGetName(NULL), "coding_rate=%d", cr);
 
   tef::lora::setBandwidth(bw);
-  // tef::lora::setBandwidth(CONFIG_BANDWIDTH);
-  // int bw = lora::getBandwidth();
   ESP_LOGI(pcTaskGetName(NULL), "bandwidth=%d", bw);
 
   tef::lora::setSpreadingFactor(sf);
-  // tef::lora::setSpreadingFactor(CONFIG_SF_RATE);
-  // int sf = lora::getSpreadingFactor();
   ESP_LOGI(pcTaskGetName(NULL), "spreading_factor=%d", sf);
+
   xTaskCreate(&sensorsTask, "Sensors", 1024 * 3, NULL, 5, NULL);
   vTaskDelay(pdMS_TO_TICKS(1000));
-#if CONFIG_SENDER
-  xTaskCreate(&task_tx, "TX", 1024 * 3, NULL, 5, NULL);
-#endif
-#if CONFIG_RECEIVER
-  xTaskCreate(&task_rx, "RX", 1024 * 3, NULL, 5, NULL);
-#endif
+  xTaskCreate(&txTask, "TX", 1024 * 3, NULL, 5, NULL);
 }
