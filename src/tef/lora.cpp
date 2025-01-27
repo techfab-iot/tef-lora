@@ -56,12 +56,14 @@ static constexpr int kPaOutputRfoPin = 0;
 static constexpr int kPaOutputPaBoostPin = 1;
 static constexpr int kTimeoutReset = 100;
 
-// SPI Stuff
-#if CONFIG_SPI2_HOST
-static constexpr spi_host_device_t kHostId = SPI2_HOST;
-#elif CONFIG_SPI3_HOST
-static constexpr spi_host_device_t kHostId = SPI3_HOST;
-#endif
+// GPIO Pins
+static gpio_num_t kGpioReset = GPIO_NUM_NC;
+static gpio_num_t kGpioCs = GPIO_NUM_NC;
+static gpio_num_t kGpioSck = GPIO_NUM_NC;
+static gpio_num_t kGpioMiso = GPIO_NUM_NC;
+static gpio_num_t kGpioMosi = GPIO_NUM_NC;
+
+static spi_host_device_t kHostId = SPI2_HOST;
 
 static spi_device_handle_t _spi = {0};
 static int _implicit;
@@ -70,6 +72,7 @@ static int _send_packet_lost = 0;
 static int _cr = 0;
 static int _sbw = 0;
 static int _sf = 0;
+static int clock_speed = 9000000;
 
 // use spi_device_transmit
 static constexpr bool kSpiTransmit = true;
@@ -94,13 +97,13 @@ void writeReg(int reg, int val) {
   t.tx_buffer = out;
   t.rx_buffer = in;
 
-  // gpio_set_level(CONFIG_CS_GPIO, 0);
+  // gpio_set_level(kGpioCs, 0);
   if (kSpiTransmit == true)
     spi_device_transmit(_spi, &t);
   else
     spi_device_polling_transmit(_spi, &t);
 
-  // gpio_set_level(CONFIG_CS_GPIO, 1);
+  // gpio_set_level(kGpioCs, 1);
 }
 
 /**
@@ -123,12 +126,12 @@ void writeRegBuffer(int reg, uint8_t *val, int len) {
   t.tx_buffer = out;
   t.rx_buffer = nullptr;
 
-  // gpio_set_level(CONFIG_CS_GPIO, 0);
+  // gpio_set_level(kGpioCs, 0);
   if (kSpiTransmit == true)
     spi_device_transmit(_spi, &t);
   else
     spi_device_polling_transmit(_spi, &t);
-  // gpio_set_level(CONFIG_CS_GPIO, 1);
+  // gpio_set_level(kGpioCs, 1);
   free(out);
 }
 
@@ -149,12 +152,12 @@ int readReg(int reg) {
   t.tx_buffer = out;
   t.rx_buffer = in;
 
-  // gpio_set_level(CONFIG_CS_GPIO, 0);
+  // gpio_set_level(kGpioCs, 0);
   if (kSpiTransmit == true)
     spi_device_transmit(_spi, &t);
   else
     spi_device_polling_transmit(_spi, &t);
-  // gpio_set_level(CONFIG_CS_GPIO, 1);
+  // gpio_set_level(kGpioCs, 1);
   return in[1];
 }
 
@@ -180,12 +183,12 @@ void readRegBuffer(int reg, uint8_t *val, int len) {
   t.tx_buffer = out;
   t.rx_buffer = in;
 
-  // gpio_set_level(CONFIG_CS_GPIO, 0);
+  // gpio_set_level(kGpioCs, 0);
   if (kSpiTransmit == true)
     spi_device_transmit(_spi, &t);
   else
     spi_device_polling_transmit(_spi, &t);
-  // gpio_set_level(CONFIG_CS_GPIO, 1);
+  // gpio_set_level(kGpioCs, 1);
   for (int i = 0; i < len; i++) {
     val[i] = in[i + 1];
   }
@@ -197,9 +200,9 @@ void readRegBuffer(int reg, uint8_t *val, int len) {
  * Perform physical reset on the Lora chip
  */
 void reset(void) {
-  gpio_set_level((gpio_num_t)CONFIG_RST_GPIO, 0);
+  gpio_set_level((gpio_num_t)kGpioReset, 0);
   vTaskDelay(pdMS_TO_TICKS(1));
-  gpio_set_level((gpio_num_t)CONFIG_RST_GPIO, 1);
+  gpio_set_level((gpio_num_t)kGpioReset, 1);
   vTaskDelay(pdMS_TO_TICKS(10));
 }
 
@@ -458,16 +461,16 @@ int init(void) {
   /*
    * Configure CPU hardware to communicate with the radio chip
    */
-  gpio_reset_pin((gpio_num_t)CONFIG_RST_GPIO);
-  gpio_set_direction((gpio_num_t)CONFIG_RST_GPIO, GPIO_MODE_OUTPUT);
-  gpio_reset_pin((gpio_num_t)CONFIG_CS_GPIO);
-  gpio_set_direction((gpio_num_t)CONFIG_CS_GPIO, GPIO_MODE_OUTPUT);
-  gpio_set_level((gpio_num_t)CONFIG_CS_GPIO, 1);
+  gpio_reset_pin((gpio_num_t)kGpioReset);
+  gpio_set_direction((gpio_num_t)kGpioReset, GPIO_MODE_OUTPUT);
+  gpio_reset_pin((gpio_num_t)kGpioCs);
+  gpio_set_direction((gpio_num_t)kGpioCs, GPIO_MODE_OUTPUT);
+  gpio_set_level((gpio_num_t)kGpioCs, 1);
 
   spi_bus_config_t bus = {0};
-  bus.mosi_io_num = CONFIG_MOSI_GPIO;
-  bus.miso_io_num = CONFIG_MISO_GPIO;
-  bus.sclk_io_num = CONFIG_SCK_GPIO;
+  bus.mosi_io_num = kGpioMosi;
+  bus.miso_io_num = kGpioMiso;
+  bus.sclk_io_num = kGpioSck;
   bus.quadwp_io_num = -1;
   bus.quadhd_io_num = -1;
   bus.max_transfer_sz = 0;
@@ -478,8 +481,8 @@ int init(void) {
 
   spi_device_interface_config_t dev = {0};
   dev.mode = 0;
-  dev.clock_speed_hz = 9000000;
-  dev.spics_io_num = CONFIG_CS_GPIO;
+  dev.clock_speed_hz = clock_speed;
+  dev.spics_io_num = kGpioCs;
   dev.flags = 0;
   dev.queue_size = 7;
   dev.pre_cb = nullptr;
@@ -669,4 +672,18 @@ void dumpRegisters(void) {
   }
   printf("\n");
 }
+
+void setPins(
+  gpio_num_t rst, gpio_num_t cs, gpio_num_t sck, gpio_num_t miso,
+  gpio_num_t mosi) {
+  kGpioReset = rst;
+  kGpioCs = cs;
+  kGpioSck = sck;
+  kGpioMiso = miso;
+  kGpioMosi = mosi;
+}
+void setClockSpeed(int speed) { clock_speed = speed; }
+
+void setSpiHost(spi_host_device_t host) { kHostId = host; }
+
 }  // namespace tef::lora
