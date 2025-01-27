@@ -1,6 +1,5 @@
 #pragma once
-#include <stdint.h>
-
+#include "hal/spi_types.h"
 namespace tef::lora {
 
 void reset(void);
@@ -34,5 +33,10 @@ int packetRssi(void);
 float packetSnr(void);
 void close(void);
 void dumpRegisters(void);
+void setPins(
+  gpio_num_t rst, gpio_num_t cs, gpio_num_t sck, gpio_num_t miso,
+  gpio_num_t mosi);
+void setClockSpeed(int speed);
+void setSpiHost(spi_host_device_t host);
 
 }  // namespace tef::lora
