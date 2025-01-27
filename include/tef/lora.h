@@ -1,4 +1,5 @@
 #pragma once
+#include "driver/gpio.h"
 #include "hal/spi_types.h"
 namespace tef::lora {
 

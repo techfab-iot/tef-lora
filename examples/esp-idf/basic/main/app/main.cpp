@@ -12,6 +12,12 @@
 #include "freertos/task.h"
 #include "tef/lora.h"
 
+static constexpr gpio_num_t kGpioReset = GPIO_NUM_18;
+static constexpr gpio_num_t kGpioCs = GPIO_NUM_17;  // NSS
+static constexpr gpio_num_t kGpioSck = GPIO_NUM_16;
+static constexpr gpio_num_t kGpioMiso = GPIO_NUM_7;
+static constexpr gpio_num_t kGpioMosi = GPIO_NUM_15;
+
 #if CONFIG_SENDER
 void task_tx(void *pvParameters) {
   ESP_LOGI(pcTaskGetName(NULL), "Start");
@@ -48,6 +54,7 @@ void task_rx(void *pvParameters) {
 #endif  // CONFIG_RECEIVER
 
 extern "C" void app_main() {
+  tef::lora::setPins(kGpioReset, kGpioCs, kGpioSck, kGpioMiso, kGpioMosi);
   if (tef::lora::init() == 0) {
     ESP_LOGE(pcTaskGetName(NULL), "Does not recognize the module");
     while (1) {
