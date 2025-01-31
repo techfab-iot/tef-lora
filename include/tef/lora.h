@@ -1,4 +1,6 @@
 #pragma once
+#include <string>
+
 #include "driver/gpio.h"
 #include "hal/spi_types.h"
 namespace tef::lora {
@@ -27,6 +29,7 @@ void enableCrc(void);
 void disableCrc(void);
 int init(void);
 void sendPacket(uint8_t *buf, int size);
+void sendMessage(std::string &message);
 int receivePacket(uint8_t *buf, int size);
 int received(void);
 int packetLost(void);

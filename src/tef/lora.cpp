@@ -1,7 +1,5 @@
 #include "tef/lora.h"
 
-#include <string.h>
-
 #include "driver/spi_master.h"
 #include "esp_log.h"
 #include "esp_system.h"
@@ -580,6 +578,10 @@ void sendPacket(uint8_t *buf, int size) {
     ESP_LOGE(kLogTag, "lora_send_packet Fail");
   }
   writeReg(kRegIrqFlags, kIrqTxDoneMask);
+}
+
+void sendMessage(std::string &message) {
+  sendPacket(reinterpret_cast<uint8_t *>(message.data()), message.size());
 }
 
 /**
