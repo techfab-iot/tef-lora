@@ -55,14 +55,14 @@ void task_rx(void *pvParameters) {
   ESP_LOGI(pcTaskGetName(NULL), "Start");
   uint8_t buf[256];  // Maximum Payload size of SX1261/62/68 is 255
   while (1) {
-    uint8_t rxLen = LoRaReceive(buf, sizeof(buf));
+    uint8_t rxLen = tef::lora::sx1262::receive(buf, sizeof(buf));
     if (rxLen > 0) {
       ESP_LOGI(
         pcTaskGetName(NULL), "%d byte packet received:[%.*s]", rxLen, rxLen,
         buf);
 
       int8_t rssi, snr;
-      GetPacketStatus(&rssi, &snr);
+      tef::lora::sx1262::getPacketStatus(&rssi, &snr);
       ESP_LOGI(pcTaskGetName(NULL), "rssi=%d[dBm] snr=%d[dB]", rssi, snr);
     }
     vTaskDelay(1);  // Avoid WatchDog alerts
@@ -72,7 +72,7 @@ void task_rx(void *pvParameters) {
 
 extern "C" void app_main() {
   // Initialize LoRa
-  LoRaInit(
+  tef::lora::sx1262::init(
     kGpioReset, kGpioCs, kGpioSck, kGpioMiso, kGpioMosi, kGpioBusy, kGpioTxen,
     kGpioRxen);
   int8_t txPowerInDbm = 22;
@@ -104,7 +104,8 @@ extern "C" void app_main() {
 
   // LoRaDebugPrint(true);
   if (
-    LoRaBegin(frequencyInHz, txPowerInDbm, tcxoVoltage, useRegulatorLDO) != 0) {
+    tef::lora::sx1262::begin(
+      frequencyInHz, txPowerInDbm, tcxoVoltage, useRegulatorLDO) != 0) {
     ESP_LOGE(TAG, "Does not recognize the module");
     while (1) {
       vTaskDelay(1);
@@ -123,7 +124,7 @@ extern "C" void app_main() {
   bandwidth = CONFIG_BANDWIDTH;
   codingRate = CONFIG_CODING_RATE;
 #endif
-  LoRaConfig(
+  tef::lora::sx1262::config(
     spreadingFactor, bandwidth, codingRate, preambleLength, payloadLen, crcOn,
     invertIrq);
 
