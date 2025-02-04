@@ -14,6 +14,15 @@
 
 static const char *TAG = "MAIN";
 
+static constexpr gpio_num_t kGpioReset = GPIO_NUM_5;
+static constexpr gpio_num_t kGpioCs = GPIO_NUM_8;  // NSS
+static constexpr gpio_num_t kGpioSck = GPIO_NUM_16;
+static constexpr gpio_num_t kGpioMiso = GPIO_NUM_17;
+static constexpr gpio_num_t kGpioMosi = GPIO_NUM_18;
+static constexpr gpio_num_t kGpioBusy = GPIO_NUM_15;
+static constexpr gpio_num_t kGpioTxen = GPIO_NUM_6;
+static constexpr gpio_num_t kGpioRxen = GPIO_NUM_NC;
+
 #if CONFIG_SENDER
 void task_tx(void *pvParameters) {
   ESP_LOGI(pcTaskGetName(NULL), "Start");
@@ -61,9 +70,11 @@ void task_rx(void *pvParameters) {
 }
 #endif  // CONFIG_RECEIVER
 
-void app_main() {
+extern "C" void app_main() {
   // Initialize LoRa
-  LoRaInit();
+  LoRaInit(
+    kGpioReset, kGpioCs, kGpioSck, kGpioMiso, kGpioMosi, kGpioBusy, kGpioTxen,
+    kGpioRxen);
   int8_t txPowerInDbm = 22;
 
   uint32_t frequencyInHz = 0;

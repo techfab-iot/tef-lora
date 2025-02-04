@@ -1,5 +1,7 @@
 #pragma once
 
+#include <driver/gpio.h>
+
 #include "driver/spi_master.h"
 
 // return values
@@ -481,7 +483,9 @@
 #define SX126x_TXMODE_BACK2RX 0x04
 
 // Public function
-void LoRaInit(void);
+void LoRaInit(
+  gpio_num_t rst, gpio_num_t cs, gpio_num_t sck, gpio_num_t miso,
+  gpio_num_t mosi, gpio_num_t busy, gpio_num_t txen, gpio_num_t rxen);
 int16_t LoRaBegin(
   uint32_t frequencyInHz, int8_t txPowerInDbm, float tcxoVoltage,
   bool useRegulatorLDO);
@@ -552,5 +556,3 @@ void SPItransfer(
   uint8_t cmd, bool write, uint8_t* dataOut, uint8_t* dataIn, uint8_t numBytes,
   bool waitForBusy);
 void LoRaError(int error);
-
-#endif
