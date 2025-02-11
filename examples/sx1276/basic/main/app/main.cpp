@@ -12,11 +12,11 @@
 #include "freertos/task.h"
 #include "tef/lora.h"
 
-static constexpr gpio_num_t kGpioReset = GPIO_NUM_18;
-static constexpr gpio_num_t kGpioCs = GPIO_NUM_17;  // NSS
-static constexpr gpio_num_t kGpioSck = GPIO_NUM_16;
-static constexpr gpio_num_t kGpioMiso = GPIO_NUM_7;
-static constexpr gpio_num_t kGpioMosi = GPIO_NUM_15;
+static constexpr gpio_num_t kGpioReset = GPIO_NUM_21;
+static constexpr gpio_num_t kGpioCs = GPIO_NUM_18;  // NSS
+static constexpr gpio_num_t kGpioSck = GPIO_NUM_17;
+static constexpr gpio_num_t kGpioMiso = GPIO_NUM_15;
+static constexpr gpio_num_t kGpioMosi = GPIO_NUM_16;
 
 #if CONFIG_SENDER
 void task_tx(void *pvParameters) {
@@ -25,9 +25,9 @@ void task_tx(void *pvParameters) {
   while (1) {
     TickType_t nowTick = xTaskGetTickCount();
     int send_len = sprintf((char *)buf, "Hello World!! %" PRIu32, nowTick);
-    tef::lora::sendPacket(buf, send_len);
+    tef::lora::sx1276::sendPacket(buf, send_len);
     ESP_LOGI(pcTaskGetName(NULL), "%d byte packet sent...", send_len);
-    int lost = tef::lora::packetLost();
+    int lost = tef::lora::sx1276::packetLost();
     if (lost != 0) {
       ESP_LOGW(pcTaskGetName(NULL), "%d packets lost", lost);
     }
@@ -41,9 +41,9 @@ void task_rx(void *pvParameters) {
   ESP_LOGI(pcTaskGetName(NULL), "Start");
   uint8_t buf[256];  // Maximum Payload size of SX1276/77/78/79 is 255
   while (1) {
-    tef::lora::receive();  // put into receive mode
-    if (tef::lora::received()) {
-      int rxLen = tef::lora::receivePacket(buf, sizeof(buf));
+    tef::lora::sx1276::receive();  // put into receive mode
+    if (tef::lora::sx1276::received()) {
+      int rxLen = tef::lora::sx1276::receivePacket(buf, sizeof(buf));
       ESP_LOGI(
         pcTaskGetName(NULL), "%d byte packet received:[%.*s]", rxLen, rxLen,
         buf);
@@ -54,8 +54,9 @@ void task_rx(void *pvParameters) {
 #endif  // CONFIG_RECEIVER
 
 extern "C" void app_main() {
-  tef::lora::setPins(kGpioReset, kGpioCs, kGpioSck, kGpioMiso, kGpioMosi);
-  if (tef::lora::init() == 0) {
+  tef::lora::sx1276::setPins(
+    kGpioReset, kGpioCs, kGpioSck, kGpioMiso, kGpioMosi);
+  if (tef::lora::sx1276::init() == 0) {
     ESP_LOGE(pcTaskGetName(NULL), "Does not recognize the module");
     while (1) {
       vTaskDelay(1);
@@ -64,20 +65,20 @@ extern "C" void app_main() {
 
 #if CONFIG_433MHZ
   ESP_LOGI(pcTaskGetName(NULL), "Frequency is 433MHz");
-  tef::lora::setFrequency(433e6);  // 433MHz
+  tef::lora::sx1276::setFrequency(433e6);  // 433MHz
 #elif CONFIG_866MHZ
   ESP_LOGI(pcTaskGetName(NULL), "Frequency is 866MHz");
-  tef::lora::setFrequency(866e6);  // 866MHz
+  tef::lora::sx1276::setFrequency(866e6);  // 866MHz
 #elif CONFIG_915MHZ
   ESP_LOGI(pcTaskGetName(NULL), "Frequency is 915MHz");
-  tef::lora::setFrequency(915e6);  // 915MHz
+  tef::lora::sx1276::setFrequency(915e6);  // 915MHz
 #elif CONFIG_OTHER
   ESP_LOGI(pcTaskGetName(NULL), "Frequency is %dMHz", CONFIG_OTHER_FREQUENCY);
   long frequency = CONFIG_OTHER_FREQUENCY * 1000000;
-  tef::lora::setFrequency(frequency);
+  tef::lora::sx1276::setFrequency(frequency);
 #endif
 
-  tef::lora::enableCrc();
+  tef::lora::sx1276::enableCrc();
 
   int cr = 1;
   int bw = 7;
@@ -88,19 +89,19 @@ extern "C" void app_main() {
   sf = CONFIG_SF_RATE;
 #endif
 
-  tef::lora::setCodingRate(cr);
-  // tef::lora::setCodingRate(CONFIG_CODING_RATE);
-  // cr = lora::getCodingRate();
+  tef::lora::sx1276::setCodingRate(cr);
+  // tef::lora::sx1276::setCodingRate(CONFIG_CODING_RATE);
+  // cr = lora::sx1276::getCodingRate();
   ESP_LOGI(pcTaskGetName(NULL), "coding_rate=%d", cr);
 
-  tef::lora::setBandwidth(bw);
-  // tef::lora::setBandwidth(CONFIG_BANDWIDTH);
+  tef::lora::sx1276::setBandwidth(bw);
+  // tef::lora::sx1276::setBandwidth(CONFIG_BANDWIDTH);
   // int bw = lora::getBandwidth();
   ESP_LOGI(pcTaskGetName(NULL), "bandwidth=%d", bw);
 
-  tef::lora::setSpreadingFactor(sf);
-  // tef::lora::setSpreadingFactor(CONFIG_SF_RATE);
-  // int sf = lora::getSpreadingFactor();
+  tef::lora::sx1276::setSpreadingFactor(sf);
+  // tef::lora::sx1276::setSpreadingFactor(CONFIG_SF_RATE);
+  // int sf = lora::sx1276::getSpreadingFactor();
   ESP_LOGI(pcTaskGetName(NULL), "spreading_factor=%d", sf);
 
 #if CONFIG_SENDER
