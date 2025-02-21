@@ -1,4 +1,4 @@
 dependencies:
   techfab-iot/tef-lora:
     git: git@github.com:techfab-iot/tef-lora.git
-    version: 0.0.6
+    version: "develop"
