@@ -31,7 +31,7 @@ void task_tx(void *pvParameters) {
     if (lost != 0) {
       ESP_LOGW(pcTaskGetName(NULL), "%d packets lost", lost);
     }
-    vTaskDelay(pdMS_TO_TICKS(300000));
+    vTaskDelay(pdMS_TO_TICKS(3000));
   }  // end while
 }
 #endif  // CONFIG_SENDER

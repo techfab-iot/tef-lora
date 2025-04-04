@@ -1,0 +1,7 @@
+dependencies:
+  techfab-iot/tef-hlw8012:
+    git: git@github.com:techfab-iot/tef-hlw8012.git
+    version: 0.3.0
+  techfab-iot/tef-lora:
+    git: git@github.com:techfab-iot/tef-lora.git
+    version: "develop"

@@ -1,0 +1,9 @@
+#Name          ,Type,SubType ,Offset  ,Size  , Flags
+esp_secure_cert,0x3F,        ,0xD000  ,0x2000,encrypted
+nvs            ,data,nvs     ,        ,24K   ,
+nvs_key        ,data,nvs_keys,        ,8K    ,encrypted
+phy_init       ,data,phy     ,        ,4K    ,
+otadata        ,data,ota     ,        ,8K    ,
+ota_0          ,app ,ota_0   ,        ,3M    ,encrypted
+ota_1          ,app ,ota_1   ,        ,3M    ,encrypted
+fs         ,data,littlefs,        ,1M    ,encrypted

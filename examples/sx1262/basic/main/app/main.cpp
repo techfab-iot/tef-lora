@@ -15,12 +15,12 @@
 static const char *TAG = "MAIN";
 
 static constexpr gpio_num_t kGpioReset = GPIO_NUM_5;
-static constexpr gpio_num_t kGpioCs = GPIO_NUM_8;  // NSS
-static constexpr gpio_num_t kGpioSck = GPIO_NUM_16;
-static constexpr gpio_num_t kGpioMiso = GPIO_NUM_17;
-static constexpr gpio_num_t kGpioMosi = GPIO_NUM_18;
-static constexpr gpio_num_t kGpioBusy = GPIO_NUM_15;
-static constexpr gpio_num_t kGpioTxen = GPIO_NUM_6;
+static constexpr gpio_num_t kGpioCs = GPIO_NUM_8;
+static constexpr gpio_num_t kGpioSck = GPIO_NUM_10;
+static constexpr gpio_num_t kGpioMiso = GPIO_NUM_6;
+static constexpr gpio_num_t kGpioMosi = GPIO_NUM_7;
+static constexpr gpio_num_t kGpioBusy = GPIO_NUM_4;
+static constexpr gpio_num_t kGpioTxen = GPIO_NUM_3;
 static constexpr gpio_num_t kGpioRxen = GPIO_NUM_NC;
 
 #if CONFIG_SENDER
@@ -33,14 +33,14 @@ void task_tx(void *pvParameters) {
     ESP_LOGI(pcTaskGetName(NULL), "%d byte packet sent...", txLen);
 
     // Wait for transmission to complete
-    if (LoRaSend(buf, txLen, SX126x_TXMODE_SYNC) == false) {
+    if (tef::lora::sx1262::send(buf, txLen, SX126x_TXMODE_SYNC) == false) {
       ESP_LOGE(pcTaskGetName(NULL), "LoRaSend fail");
     }
 
     // Do not wait for the transmission to be completed
     // LoRaSend(buf, txLen, SX126x_TXMODE_ASYNC );
 
-    int lost = GetPacketLost();
+    int lost = tef::lora::sx1262::getPacketLost();
     if (lost != 0) {
       ESP_LOGW(pcTaskGetName(NULL), "%d packets lost", lost);
     }
@@ -75,6 +75,7 @@ extern "C" void app_main() {
   tef::lora::sx1262::init(
     kGpioReset, kGpioCs, kGpioSck, kGpioMiso, kGpioMosi, kGpioBusy, kGpioTxen,
     kGpioRxen);
+  tef::lora::sx1262::debugPrint(true);
   int8_t txPowerInDbm = 22;
 
   uint32_t frequencyInHz = 0;
