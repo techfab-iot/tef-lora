@@ -1,0 +1,16 @@
+dependencies:
+  techfab-iot/tef-hlw8012:
+    git: git@github.com:techfab-iot/tef-hlw8012.git
+    version: 0.3.0
+  techfab-iot/tef-lora:
+    git: git@github.com:techfab-iot/tef-lora.git
+    version: "develop"
+  techfab-iot/tef-mesh:
+    git: git@github.com:techfab-iot/tef-mesh.git
+    version: 0.5.2
+  techfab-iot/tef-nvs:
+    git: git@github.com:techfab-iot/tef-nvs.git
+    version: "v0.2.1"
+  techfab-iot/tef-wifi-bridge:
+    git: git@github.com:techfab-iot/tef-wifi-bridge.git
+    version: 0.4.0

@@ -1,4 +1,0 @@
-#
-# Communication Device Class (CDC)
-#
-CONFIG_TINYUSB_CDC_ENABLED=y
