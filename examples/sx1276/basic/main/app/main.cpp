@@ -12,11 +12,11 @@
 #include "freertos/task.h"
 #include "tef/lora.h"
 
-static constexpr gpio_num_t kGpioReset = GPIO_NUM_21;
-static constexpr gpio_num_t kGpioCs = GPIO_NUM_18;  // NSS
-static constexpr gpio_num_t kGpioSck = GPIO_NUM_17;
-static constexpr gpio_num_t kGpioMiso = GPIO_NUM_15;
-static constexpr gpio_num_t kGpioMosi = GPIO_NUM_16;
+static constexpr gpio_num_t kGpioReset = GPIO_NUM_18;
+static constexpr gpio_num_t kGpioCs = GPIO_NUM_17;  // NSS
+static constexpr gpio_num_t kGpioSck = GPIO_NUM_16;
+static constexpr gpio_num_t kGpioMiso = GPIO_NUM_7;
+static constexpr gpio_num_t kGpioMosi = GPIO_NUM_15;
 
 #if CONFIG_SENDER
 void task_tx(void *pvParameters) {
