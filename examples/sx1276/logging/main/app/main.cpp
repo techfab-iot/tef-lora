@@ -20,11 +20,11 @@
 #include "tef/lora.h"
 namespace sensor = ::app::modules::sensors;
 
-static constexpr gpio_num_t kGpioReset = GPIO_NUM_21;
-static constexpr gpio_num_t kGpioCs = GPIO_NUM_18;  // NSS
-static constexpr gpio_num_t kGpioSck = GPIO_NUM_17;
-static constexpr gpio_num_t kGpioMiso = GPIO_NUM_15;
-static constexpr gpio_num_t kGpioMosi = GPIO_NUM_16;
+static constexpr gpio_num_t kGpioReset = GPIO_NUM_18;
+static constexpr gpio_num_t kGpioCs = GPIO_NUM_17;  // NSS
+static constexpr gpio_num_t kGpioSck = GPIO_NUM_16;
+static constexpr gpio_num_t kGpioMiso = GPIO_NUM_7;
+static constexpr gpio_num_t kGpioMosi = GPIO_NUM_15;
 static constexpr double kVoltageMultiplier = 431993;
 static constexpr double kCurrentMultiplier = 11135;
 static constexpr double kActivePowerMultiplier = 9626328;
