@@ -27,6 +27,8 @@ long getPreambleLength(void);
 void setSyncWord(int sw);
 void enableCrc(void);
 void disableCrc(void);
+void enableLdro(void);
+void disableLdro(void);
 int init(void);
 void sendPacket(uint8_t *buf, int size);
 void sendMessage(std::string &message);

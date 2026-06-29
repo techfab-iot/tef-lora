@@ -450,6 +450,14 @@ void disableCrc(void) {
   writeReg(kRegModemConfig2, readReg(kRegModemConfig2) & 0xfb);
 }
 
+void enableLdro(void) {
+  writeReg(kRegModemConfig3, readReg(kRegModemConfig3) | 0x08);
+}
+
+void disableLdro(void) {
+  writeReg(kRegModemConfig3, readReg(kRegModemConfig3) & 0xf7);
+}
+
 /**
  * Perform hardware initialization.
  */
