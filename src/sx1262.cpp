@@ -946,6 +946,14 @@ uint8_t writeCommand2(uint8_t cmd, uint8_t *data, uint8_t numBytes) {
   spiWriteByte(txBuf, numBytes + 1);
   // stop transfer
   gpio_set_level(kGpioCs, HIGH);
+
+  // Wait for BUSY to rise (chip starts processing the command) and fall
+  // again (command applied) before letting the caller issue another SPI
+  // transaction. Without this, state-transition commands (SET_TX, SET_RX,
+  // SET_STANDBY) can be silently dropped: the next command's pre-wait sees
+  // BUSY already low — because the previous one never got acknowledged —
+  // and proceeds as if the transition succeeded.
+  waitForIdle(BUSY_WAIT, const_cast<char *>("end writeCommand2"), false);
   return 0;
 }
 
