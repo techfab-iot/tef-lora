@@ -1,7 +1,7 @@
 dependencies:
   techfab-iot/tef-lora:
     git: git@github.com:techfab-iot/tef-lora.git
-    version: fix/sx1262-write-command-status
+    version: "*"
   techfab-iot/tef-boards:
     git: git@github.com:techfab-iot/tef-boards.git
     version: main
