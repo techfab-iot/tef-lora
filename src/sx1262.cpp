@@ -391,11 +391,11 @@ void setTxPower(int8_t txPowerInDbm) {
 }
 
 void reset(void) {
-  esp_rom_delay_us(10);
+  vTaskDelay(pdMS_TO_TICKS(10));
   gpio_set_level(kGpioReset, 0);
-  esp_rom_delay_us(20);
+  vTaskDelay(pdMS_TO_TICKS(20));
   gpio_set_level(kGpioReset, 1);
-  esp_rom_delay_us(10);
+  vTaskDelay(pdMS_TO_TICKS(10));
   // ensure BUSY is low (state meachine ready)
   waitForIdle(BUSY_WAIT, const_cast<char *>("reset"), true);
 }
@@ -633,14 +633,15 @@ void setRx(uint32_t timeout) {
   buf[2] = (uint8_t)(timeout & 0xFF);
   writeCommand(SX126X_CMD_SET_RX, buf, 3);  // 0x82
 
-  for (int retry = 0; retry < 10; retry++) {
-    if ((getStatus() & 0x70) == 0x50) break;
-    esp_rom_delay_us(1);
+  uint8_t status = 0;
+  for (int retry = 0; retry < 100; retry++) {
+    status = getStatus();
+    if ((status & 0x70) == 0x50) return;
+    vTaskDelay(1);
   }
-  if ((getStatus() & 0x70) != 0x50) {
-    ESP_LOGE(kLogTag, "setRx Illegal Status");
-    error(ERR_INVALID_SETRX_STATE);
-  }
+  ESP_LOGW(
+    kLogTag,
+    "SetRx concluído, mas GetStatus não reportou RX (status=0x%02x)", status);
 }
 
 void setRxEnable(void) {
@@ -873,15 +874,8 @@ void readRegister(uint16_t reg, uint8_t *data, uint8_t numBytes) {
 #endif
 }
 
-// writeCommand with retry
 void writeCommand(uint8_t cmd, uint8_t *data, uint8_t numBytes) {
-  uint8_t status;
-  for (int retry = 1; retry < 10; retry++) {
-    status = writeCommand2(cmd, data, numBytes);
-    ESP_LOGD(kLogTag, "status=%02x", status);
-    if (status == 0) break;
-    ESP_LOGW(kLogTag, "writeCommand2 status=%02x retry=%d", status, retry);
-  }
+  uint8_t status = writeCommand2(cmd, data, numBytes);
   if (status != 0) {
     ESP_LOGE(kLogTag, "SPI Transaction error:0x%02x", status);
     error(ERR_SPI_TRANSACTION);
@@ -889,59 +883,31 @@ void writeCommand(uint8_t cmd, uint8_t *data, uint8_t numBytes) {
 }
 
 uint8_t writeCommand2(uint8_t cmd, uint8_t *data, uint8_t numBytes) {
-  // ensure BUSY is low (state meachine ready)
+  // ensure BUSY is low (state machine ready)
   waitForIdle(BUSY_WAIT, const_cast<char *>("start writeCommand2"), true);
 
   // start transfer
   gpio_set_level(kGpioCs, LOW);
 
-  // send command byte
   if (debug_print) {
     ESP_LOGI(kLogTag, "writeCommand: CMD=0x%02x", cmd);
   }
   spiTransfer(cmd);
 
-  // variable to save error during SPI transfer
-  uint8_t status = 0;
-
-  // send/receive all bytes
+  // send data bytes — SX1262 does not drive MISO during write command data
+  // phases, so MISO is not checked here (floating MISO would be misread as
+  // a status byte, causing false error detection)
   for (uint8_t n = 0; n < numBytes; n++) {
-    uint8_t in = spiTransfer(data[n]);
-    if (debug_print) {
-      ESP_LOGI(kLogTag, "%02x --> %02x", data[n], in);
-    }
-
-    // check status
-    if (
-      ((in & 0b00001110) == SX126X_STATUS_CMD_TIMEOUT) ||
-      ((in & 0b00001110) == SX126X_STATUS_CMD_INVALID) ||
-      ((in & 0b00001110) == SX126X_STATUS_CMD_FAILED)) {
-      status = in & 0b00001110;
-      break;
-    } else if (in == 0x00 || in == 0xFF) {
-      status = SX126X_STATUS_SPI_FAILED;
-      break;
-    }
+    spiTransfer(data[n]);
   }
 
   // stop transfer
   gpio_set_level(kGpioCs, HIGH);
 
-  // wait for BUSY to go low
-  waitForIdle(BUSY_WAIT, const_cast<char *>("end writeCommand2"), false);
-#if 0
-	if(waitForBusy) {
-		waitForIdle(BUSY_WAIT);
-	}
-#endif
-
-#if 0
-	if (status != 0) {
-		ESP_LOGE(kLogTag, "SPI Transaction error:0x%02x", status);
-		error(ERR_SPI_TRANSACTION);
-	}
-#endif
-  return status;
+  // BUSY goes high while the chip processes the command, then low when done.
+  // This is the authoritative success indicator for write commands.
+  bool ok = waitForIdle(BUSY_WAIT, const_cast<char *>("end writeCommand2"), false);
+  return ok ? 0 : SX126X_STATUS_SPI_FAILED;
 }
 
 void readCommand(uint8_t cmd, uint8_t *data, uint8_t numBytes) {

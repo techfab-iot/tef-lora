@@ -91,9 +91,17 @@ menu "SX126X Configuration"
 
 	config USE_TCXO
 		bool "Enable TCXO"
-		default false
+		default true
 		help
 			Enable Temperature-Compensated Crystal Oscillator.
+
+	config TCXO_VOLTAGE_MV
+		depends on USE_TCXO
+		int "TCXO voltage (mV)"
+		range 1600 3300
+		default 1800
+		help
+			DIO3 TCXO supply voltage in millivolts (e.g. 1800 for 1.8V).
 
 	config MISO_GPIO
 		int "SX126X MISO GPIO"

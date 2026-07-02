@@ -14,14 +14,15 @@
 
 static const char *TAG = "MAIN";
 
-static constexpr gpio_num_t kGpioReset = GPIO_NUM_5;
-static constexpr gpio_num_t kGpioCs = GPIO_NUM_8;
-static constexpr gpio_num_t kGpioSck = GPIO_NUM_10;
-static constexpr gpio_num_t kGpioMiso = GPIO_NUM_6;
-static constexpr gpio_num_t kGpioMosi = GPIO_NUM_7;
-static constexpr gpio_num_t kGpioBusy = GPIO_NUM_4;
-static constexpr gpio_num_t kGpioTxen = GPIO_NUM_3;
-static constexpr gpio_num_t kGpioRxen = GPIO_NUM_NC;
+// Estação TEF — ESP32-C6 + RA-01SH (SX1262)
+static constexpr gpio_num_t kGpioReset = GPIO_NUM_4;   // LORA_RST
+static constexpr gpio_num_t kGpioCs    = GPIO_NUM_15;  // LORA_NSS
+static constexpr gpio_num_t kGpioSck   = GPIO_NUM_21;  // LORA_SCK
+static constexpr gpio_num_t kGpioMiso  = GPIO_NUM_22;  // LORA_MISO
+static constexpr gpio_num_t kGpioMosi  = GPIO_NUM_23;  // LORA_MOSI
+static constexpr gpio_num_t kGpioBusy  = GPIO_NUM_20;  // LORA_BUSY
+static constexpr gpio_num_t kGpioTxen  = GPIO_NUM_NC;
+static constexpr gpio_num_t kGpioRxen  = GPIO_NUM_NC;
 
 #if CONFIG_SENDER
 void task_tx(void *pvParameters) {
@@ -94,8 +95,8 @@ extern "C" void app_main() {
 #endif
 
 #if CONFIG_USE_TCXO
-  ESP_LOGW(TAG, "Enable TCXO");
-  float tcxoVoltage = 3.3;      // use TCXO
+  ESP_LOGW(TAG, "Enable TCXO %.1fV", (double)CONFIG_TCXO_VOLTAGE_MV / 1000.0);
+  float tcxoVoltage = CONFIG_TCXO_VOLTAGE_MV / 1000.0f;
   bool useRegulatorLDO = true;  // use DCDC + LDO
 #else
   ESP_LOGW(TAG, "Disable TCXO");

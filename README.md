@@ -67,12 +67,42 @@ Na banda mais baixa (169MHz), BWs 8&9 não são suportados.
 ![config-lora-5](https://github.com/user-attachments/assets/f3dcf76e-1bf4-4c05-98ac-f9174f52820e)
 
 
-# Comunicação com SX126X
-O formato do pacote lora é estritamente especificado.
-Logo, se os parâmetros abaixo forem iguais, eles podem se comunicar.
-- Signal Bandwidth (= BW)   
-- Error Coding Rate (= CR)   
-- Spreading Factor (= SF)   
+# SX1262 — Módulo AI-Thinker RA-01SH
+
+O módulo de referência para o driver SX1262 é o **AI-Thinker RA-01SH** (915 MHz).
+
+## Configuração obrigatória
+
+O RA-01SH usa **TCXO de 1.8V** controlado via DIO3. Sem habilitar o TCXO, o chip fica travado em estado busy e não inicializa. O comutador RF interno é controlado via DIO2 (habilitado automaticamente pelo driver via `SetDio2AsRfSwitchCtrl`), sem necessidade de pino GPIO externo para TXEN/RXEN.
+
+Nos exemplos SX1262, `CONFIG_USE_TCXO=y` e `CONFIG_TCXO_VOLTAGE_MV=1800` são os padrões.
+
+## Interoperabilidade SX1276 ↔ SX1262
+
+O formato do pacote LoRa é definido pelo padrão — SX1276 e SX1262 se comunicam desde que os parâmetros abaixo sejam iguais:
+- Signal Bandwidth (= BW)
+- Error Coding Rate (= CR)
+- Spreading Factor (= SF)
+
+Mapeamento de bandwidth entre os drivers:
+
+| BW físico  | SX1276 (`setBandwidth`) | SX1262 (`config`) |
+|:----------:|:-----------------------:|:-----------------:|
+| 125 kHz    | 7                       | 4 (`0x04`)        |
+| 250 kHz    | 8                       | 5 (`0x05`)        |
+| 500 kHz    | 9                       | 6 (`0x06`)        |
+
+## Pinagem (meshlink.gateway / RA-01SH)
+
+| GPIO  | Função      |
+|:-----:|:-----------:|
+| 4     | LORA_RESET  |
+| 6     | LORA_DIO1   |
+| 7     | LORA_SCK    |
+| 9     | LORA_BUSY   |
+| 15    | LORA_MISO   |
+| 16    | LORA_MOSI   |
+| 18    | LORA_NSS    |
 
 # Sobre velocidade de comunicação e RSSI
 Na modulação LoRa, a velocidade de comunicação (bps) e sensitividade máxima de recepção (RSSI) são determinados pela combinação do fator de espalhamento (SF), banda (BW) e taxa de erro (CR).
@@ -106,4 +136,3 @@ Datasheet está [aqui](https://github.com/jgromes/RadioLib/files/8646997/DS_SX12
 
 # Reference
 https://github.com/techfab-iot/tef-lora
-
