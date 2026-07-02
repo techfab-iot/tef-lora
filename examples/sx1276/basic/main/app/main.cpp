@@ -28,7 +28,7 @@ void task_tx(void *pvParameters) {
     if (lost != 0) {
       ESP_LOGW(pcTaskGetName(NULL), "%d packets lost", lost);
     }
-    vTaskDelay(pdMS_TO_TICKS(3000));
+    vTaskDelay(pdMS_TO_TICKS(10000));
   }  // end while
 }
 #endif  // CONFIG_SENDER
@@ -61,45 +61,26 @@ extern "C" void app_main() {
     }
   }
 
-#if CONFIG_433MHZ
-  ESP_LOGI(pcTaskGetName(NULL), "Frequency is 433MHz");
-  tef::lora::sx1276::setFrequency(433e6);  // 433MHz
-#elif CONFIG_866MHZ
-  ESP_LOGI(pcTaskGetName(NULL), "Frequency is 866MHz");
-  tef::lora::sx1276::setFrequency(866e6);  // 866MHz
-#elif CONFIG_915MHZ
+  // LoRa PHY parameters: frequency (915MHz), coding rate (4/5), bandwidth
+  // (125kHz) and spreading factor (7) are fixed here so sender and receiver
+  // examples always agree, instead of being independently configurable
+  // per-firmware via Kconfig.
   ESP_LOGI(pcTaskGetName(NULL), "Frequency is 915MHz");
   tef::lora::sx1276::setFrequency(915e6);  // 915MHz
-#elif CONFIG_OTHER
-  ESP_LOGI(pcTaskGetName(NULL), "Frequency is %dMHz", CONFIG_OTHER_FREQUENCY);
-  long frequency = CONFIG_OTHER_FREQUENCY * 1000000;
-  tef::lora::sx1276::setFrequency(frequency);
-#endif
 
   tef::lora::sx1276::enableCrc();
 
-  int cr = 1;
-  int bw = 7;
+  int cr = 1;  // 4/5
+  int bw = 7;  // 125kHz
   int sf = 7;
-#if CONFIG_ADVANCED
-  cr = CONFIG_CODING_RATE;
-  bw = CONFIG_BANDWIDTH;
-  sf = CONFIG_SF_RATE;
-#endif
 
   tef::lora::sx1276::setCodingRate(cr);
-  // tef::lora::sx1276::setCodingRate(CONFIG_CODING_RATE);
-  // cr = lora::sx1276::getCodingRate();
   ESP_LOGI(pcTaskGetName(NULL), "coding_rate=%d", cr);
 
   tef::lora::sx1276::setBandwidth(bw);
-  // tef::lora::sx1276::setBandwidth(CONFIG_BANDWIDTH);
-  // int bw = lora::getBandwidth();
   ESP_LOGI(pcTaskGetName(NULL), "bandwidth=%d", bw);
 
   tef::lora::sx1276::setSpreadingFactor(sf);
-  // tef::lora::sx1276::setSpreadingFactor(CONFIG_SF_RATE);
-  // int sf = lora::sx1276::getSpreadingFactor();
   ESP_LOGI(pcTaskGetName(NULL), "spreading_factor=%d", sf);
 
 #if CONFIG_SENDER

@@ -34,9 +34,9 @@ void sendPacket() {
   payload_packet.clear();
   payload_packet += base;
   ESP_LOGI(kLogTag, "Packet to be sent: %s", payload_packet.c_str());
-  tef::lora::sendPacket(
+  tef::lora::sx1276::sendPacket(
     reinterpret_cast<uint8_t *>(payload_packet.data()), payload_packet.size());
-  int lost = tef::lora::packetLost();
+  int lost = tef::lora::sx1276::packetLost();
   if (lost != 0) ESP_LOGW(pcTaskGetName(NULL), "%d packets lost", lost);
 
   tef::proto::clearRecords();
@@ -73,46 +73,33 @@ void txTask(void *pvParameters) {
 }
 
 extern "C" void app_main() {
-  if (tef::lora::init() == 0) {
+  if (tef::lora::sx1276::init() == 0) {
     ESP_LOGE(kLogTag, "Does not recognize the module... wrong gpio pins?");
     while (1) {
       vTaskDelay(1);
     }
   }
 
-#if CONFIG_433MHZ
-  ESP_LOGI(pcTaskGetName(NULL), "Frequency is 433MHz");
-  tef::lora::setFrequency(433e6);  // 433MHz
-#elif CONFIG_866MHZ
-  ESP_LOGI(pcTaskGetName(NULL), "Frequency is 866MHz");
-  tef::lora::setFrequency(866e6);  // 866MHz
-#elif CONFIG_915MHZ
+  // LoRa PHY parameters: frequency (915MHz), coding rate (4/5), bandwidth
+  // (125kHz) and spreading factor (7) are fixed here so sender and receiver
+  // examples always agree, instead of being independently configurable
+  // per-firmware via Kconfig. Matches examples/sx1276/basic.
   ESP_LOGI(pcTaskGetName(NULL), "Frequency is 915MHz");
-  tef::lora::setFrequency(915e6);  // 915MHz
-#elif CONFIG_OTHER
-  ESP_LOGI(pcTaskGetName(NULL), "Frequency is %dMHz", CONFIG_OTHER_FREQUENCY);
-  long frequency = CONFIG_OTHER_FREQUENCY * 1000000;
-  tef::lora::setFrequency(frequency);
-#endif
+  tef::lora::sx1276::setFrequency(915e6);  // 915MHz
 
-  tef::lora::enableCrc();
+  tef::lora::sx1276::enableCrc();
 
-  int cr = 1;
-  int bw = 7;
+  int cr = 1;  // 4/5
+  int bw = 7;  // 125kHz
   int sf = 7;
-#if CONFIG_ADVANCED
-  cr = CONFIG_CODING_RATE;
-  bw = CONFIG_BANDWIDTH;
-  sf = CONFIG_SF_RATE;
-#endif
 
-  tef::lora::setCodingRate(cr);
+  tef::lora::sx1276::setCodingRate(cr);
   ESP_LOGI(pcTaskGetName(NULL), "coding_rate=%d", cr);
 
-  tef::lora::setBandwidth(bw);
+  tef::lora::sx1276::setBandwidth(bw);
   ESP_LOGI(pcTaskGetName(NULL), "bandwidth=%d", bw);
 
-  tef::lora::setSpreadingFactor(sf);
+  tef::lora::sx1276::setSpreadingFactor(sf);
   ESP_LOGI(pcTaskGetName(NULL), "spreading_factor=%d", sf);
 
   xTaskCreate(&sensorsTask, "Sensors", 1024 * 3, NULL, 5, NULL);

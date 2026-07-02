@@ -39,7 +39,7 @@ void task_tx(void *pvParameters) {
       ESP_LOGW(pcTaskGetName(NULL), "%d packets lost", lost);
     }
 
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(10000));
   }  // end while
 }
 #endif  // CONFIG_SENDER
@@ -53,20 +53,13 @@ extern "C" void app_main() {
   tef::lora::sx1262::debugPrint(false);
   int8_t txPowerInDbm = 22;
 
-  uint32_t frequencyInHz = 0;
-#if CONFIG_433MHZ
-  frequencyInHz = 433000000;
-  ESP_LOGI(TAG, "Frequency is 433MHz");
-#elif CONFIG_866MHZ
-  frequencyInHz = 866000000;
-  ESP_LOGI(TAG, "Frequency is 866MHz");
-#elif CONFIG_915MHZ
-  frequencyInHz = 915000000;
+  // LoRa PHY parameters: frequency (915MHz), spreading factor (7),
+  // bandwidth (125kHz, SX126X_LORA_BW_125_0) and coding rate (4/5,
+  // SX126X_LORA_CR_4_5) are fixed here so sender and receiver examples
+  // always agree, instead of being independently configurable per-firmware
+  // via Kconfig. Matches examples/sx1276/basic.
+  uint32_t frequencyInHz = 915000000;
   ESP_LOGI(TAG, "Frequency is 915MHz");
-#elif CONFIG_OTHER
-  ESP_LOGI(TAG, "Frequency is %dMHz", CONFIG_OTHER_FREQUENCY);
-  frequencyInHz = CONFIG_OTHER_FREQUENCY * 1000000;
-#endif
 
   ESP_LOGW(TAG, "Enable TCXO %.1fV", (double)board::kLoraTcxoVoltage);
   float tcxoVoltage = board::kLoraUseTcxo ? board::kLoraTcxoVoltage : 0.0f;
@@ -83,17 +76,12 @@ extern "C" void app_main() {
   }
 
   uint8_t spreadingFactor = 7;
-  uint8_t bandwidth = 4;
-  uint8_t codingRate = 1;
+  uint8_t bandwidth = SX126X_LORA_BW_125_0;
+  uint8_t codingRate = SX126X_LORA_CR_4_5;
   uint16_t preambleLength = 8;
   uint8_t payloadLen = 0;
   bool crcOn = true;
   bool invertIrq = false;
-#if CONFIG_ADVANCED
-  spreadingFactor = CONFIG_SF_RATE;
-  bandwidth = CONFIG_BANDWIDTH;
-  codingRate = CONFIG_CODING_RATE;
-#endif
   tef::lora::sx1262::config(
     spreadingFactor, bandwidth, codingRate, preambleLength, payloadLen, crcOn,
     invertIrq);
