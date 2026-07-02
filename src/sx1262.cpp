@@ -191,6 +191,62 @@ uint8_t spiTransfer(uint8_t address) {
   return datain[0];
 }
 
+// Runs the post-reset base configuration: standby, DIO2 RF switch, regulator,
+// optional TCXO on DIO3, sync word, packet type and full calibration.
+// Returns the device errors latched by the calibration (0 = success).
+static uint16_t initRadioConfig(float tcxoVoltage, bool useRegulatorLDO) {
+  setStandby(SX126X_STANDBY_RC);
+
+  // A stale XOSC_START_ERR (e.g. from a previous boot that misconfigured the
+  // oscillator) must be cleared before touching the TCXO, otherwise it taints
+  // the post-calibration error check — mirrors RadioLib's SX126x::setTCXO().
+  if (getDeviceErrors() & SX126X_XOSC_START_ERR) {
+    clearDeviceErrors();
+  }
+
+  setDio2AsRfSwitchCtrl(true);
+
+  if (useRegulatorLDO) {
+    setRegulatorMode(SX126X_REGULATOR_LDO);
+  } else {
+    setRegulatorMode(SX126X_REGULATOR_DC_DC);
+  }
+
+  if (tcxoVoltage > 0.0f) {
+    // DIO3 will power the TCXO whenever the chip starts the XOSC; the
+    // stabilization time is waited by the chip itself on every XOSC start,
+    // so no wall-clock delay is needed here.
+    setDio3AsTcxoCtrl(tcxoVoltage, RADIO_TCXO_SETUP_TIME);
+  }
+
+  setSyncWord(SX126X_SYNC_WORD_PRIVATE);
+
+  // SetPacketType must precede SetRfFrequency: the frequency/image
+  // calibration below depends on the packet type already being set, per the
+  // SX126x datasheet's radio configuration sequence (section 13.4.1).
+  setPacketType(SX126X_PACKET_TYPE_LORA);
+
+  calibrate(
+    SX126X_CALIBRATE_IMAGE_ON | SX126X_CALIBRATE_ADC_BULK_P_ON |
+    SX126X_CALIBRATE_ADC_BULK_N_ON | SX126X_CALIBRATE_ADC_PULSE_ON |
+    SX126X_CALIBRATE_PLL_ON | SX126X_CALIBRATE_RC13M_ON |
+    SX126X_CALIBRATE_RC64K_ON);
+  // BUSY may briefly drop after the command is accepted and rise again while
+  // the calibration itself (~3.5 ms) runs, so writeCommand's post-wait can
+  // return early — wait a fixed time and then BUSY again before reading the
+  // outcome, same sequence RadioLib uses in SX126x::config().
+  vTaskDelay(pdMS_TO_TICKS(5));
+  waitForIdle(BUSY_WAIT, const_cast<char *>("calibrate"), true);
+
+  uint8_t status = getStatus();
+  uint16_t errors = getDeviceErrors();
+  if (((status & 0x0E) == SX126X_STATUS_CMD_FAILED) && (errors == 0)) {
+    // Calibrate was rejected but no error got latched: still report failure.
+    errors = 0xFFFF;
+  }
+  return errors;
+}
+
 int16_t begin(
   uint32_t frequencyInHz, int8_t txPowerInDbm, float tcxoVoltage,
   bool useRegulatorLDO) {
@@ -210,35 +266,25 @@ int16_t begin(
   }
 
   ESP_LOGI(kLogTag, "SX126x installed");
-  setStandby(SX126X_STANDBY_RC);
-  setDio2AsRfSwitchCtrl(true);
+  ESP_LOGI(
+    kLogTag, "tcxoVoltage=%f useRegulatorLDO=%d", tcxoVoltage,
+    useRegulatorLDO);
 
-  ESP_LOGI(kLogTag, "tcxoVoltage=%f", tcxoVoltage);
-  // set TCXO control, if requested
-  if (tcxoVoltage > 0.0) {
-    setDio3AsTcxoCtrl(
-      tcxoVoltage, RADIO_TCXO_SETUP_TIME);  // Configure the radio to use a TCXO
-                                            // controlled by DIO3
+  uint16_t errors = initRadioConfig(tcxoVoltage, useRegulatorLDO);
+  if ((errors & SX126X_XOSC_START_ERR) && tcxoVoltage > 0.0f) {
+    // The oscillator did not start with DIO3 powering a TCXO — boards with a
+    // plain crystal fail exactly like this. Same fallback RadioLib applies in
+    // SX126x::modSetup(): only a hard reset unlatches the TCXO setting, then
+    // redo the whole base configuration without TCXO.
+    ESP_LOGW(
+      kLogTag, "TCXO did not start (deviceErrors=0x%04x); retrying with XTAL",
+      errors);
+    reset();
+    errors = initRadioConfig(0.0f, useRegulatorLDO);
   }
-
-  setSyncWord(SX126X_SYNC_WORD_PRIVATE);
-
-  // SetPacketType must precede SetRfFrequency: the frequency/image
-  // calibration below depends on the packet type already being set, per the
-  // SX126x datasheet's radio configuration sequence (section 13.4.1).
-  setPacketType(SX126X_PACKET_TYPE_LORA);
-
-  calibrate(
-    SX126X_CALIBRATE_IMAGE_ON | SX126X_CALIBRATE_ADC_BULK_P_ON |
-    SX126X_CALIBRATE_ADC_BULK_N_ON | SX126X_CALIBRATE_ADC_PULSE_ON |
-    SX126X_CALIBRATE_PLL_ON | SX126X_CALIBRATE_RC13M_ON |
-    SX126X_CALIBRATE_RC64K_ON);
-
-  ESP_LOGI(kLogTag, "useRegulatorLDO=%d", useRegulatorLDO);
-  if (useRegulatorLDO) {
-    setRegulatorMode(SX126X_REGULATOR_LDO);  // set regulator mode: LDO
-  } else {
-    setRegulatorMode(SX126X_REGULATOR_DC_DC);  // set regulator mode: DC-DC
+  if (errors != 0) {
+    ESP_LOGE(kLogTag, "calibration failed, deviceErrors=0x%04x", errors);
+    return ERR_UNKNOWN;
   }
 
   setBufferBaseAddress(0, 0);
@@ -316,12 +362,14 @@ void config(
 
   writeCommand(SX126X_CMD_SET_PACKET_PARAMS, PacketParams, 6);  // 0x8C
 
-  // Route packet events to DIO1 and let the ISR wake the loop.
+  // Route packet events to DIO1 and let the ISR wake the loop — same
+  // selection RadioLib programs in startReceive().
   setDioIrqParams(
     SX126X_IRQ_ALL,
-    SX126X_IRQ_NONE,   // interrupts on DIO1
-    SX126X_IRQ_NONE,   // interrupts on DIO2
-    SX126X_IRQ_NONE);  // interrupts on DIO3
+    SX126X_IRQ_RX_DONE | SX126X_IRQ_TIMEOUT |
+      SX126X_IRQ_CRC_ERR,  // interrupts on DIO1
+    SX126X_IRQ_NONE,       // interrupts on DIO2
+    SX126X_IRQ_NONE);      // interrupts on DIO3
 
   // Receive state no receive timeoout
   setRx(0xFFFFFF);
@@ -662,6 +710,17 @@ void clearIrqStatus(uint16_t irq) {
   writeCommand(SX126X_CMD_CLEAR_IRQ_STATUS, buf, 2);  // 0x02
 }
 
+uint16_t getDeviceErrors(void) {
+  uint8_t buf[3];
+  readCommand(SX126X_CMD_GET_DEVICE_ERRORS, buf, 3);  // 0x17
+  return ((uint16_t)buf[1] << 8) | buf[2];
+}
+
+void clearDeviceErrors(void) {
+  uint8_t buf[2] = {0x00, 0x00};
+  writeCommand(SX126X_CMD_CLEAR_DEVICE_ERRORS, buf, 2);  // 0x07
+}
+
 void setRx(uint32_t timeout) {
   if (debug_print) {
     ESP_LOGI(kLogTag, "----- setRx timeout=%" PRIu32, timeout);
@@ -673,6 +732,18 @@ void setRx(uint32_t timeout) {
   buf[1] = (uint8_t)((timeout >> 8) & 0xFF);
   buf[2] = (uint8_t)(timeout & 0xFF);
   writeCommand(SX126X_CMD_SET_RX, buf, 3);  // 0x82
+
+  // Confirm the chip actually entered RX (mode bits [6:4] = 0x5), same check
+  // setTx() applies for TX. Without the oscillator running SET_RX fails
+  // silently and the radio sits deaf in standby forever.
+  for (int retry = 0; retry < 10; retry++) {
+    if ((getStatus() & 0x70) == 0x50) break;
+    vTaskDelay(1);
+  }
+  if ((getStatus() & 0x70) != 0x50) {
+    ESP_LOGE(kLogTag, "setRx Illegal Status");
+    error(ERR_INVALID_SETRX_STATE);
+  }
 }
 
 void setRxEnable(void) {
@@ -938,14 +1009,30 @@ uint8_t writeCommand2(uint8_t cmd, uint8_t *data, uint8_t numBytes) {
   // jitter between transactions, which was observed to desync the SX1262's
   // command state machine and corrupt subsequent reads.
   uint8_t txBuf[9];
+  uint8_t rxBuf[9];
   txBuf[0] = cmd;
   memcpy(&txBuf[1], data, numBytes);
 
   // start transfer
   gpio_set_level(kGpioCs, LOW);
-  spiWriteByte(txBuf, numBytes + 1);
+  spiReadByte(rxBuf, txBuf, numBytes + 1);
   // stop transfer
   gpio_set_level(kGpioCs, HIGH);
+
+  // The chip clocks its status byte out on every byte after the opcode;
+  // command-status bits [3:1] flag a rejected command (timeout/invalid/
+  // failed) — same check RadioLib's SPIparseStatus applies to every
+  // transaction. Report the raw status byte so the caller can log it.
+  uint8_t status = 0;
+  if (numBytes > 0) {
+    uint8_t cmdStatus = rxBuf[1] & 0x0E;
+    if (
+      cmdStatus == SX126X_STATUS_CMD_TIMEOUT ||
+      cmdStatus == SX126X_STATUS_CMD_INVALID ||
+      cmdStatus == SX126X_STATUS_CMD_FAILED) {
+      status = rxBuf[1];
+    }
+  }
 
   // Wait for BUSY to rise (chip starts processing the command) and fall
   // again (command applied) before letting the caller issue another SPI
@@ -954,7 +1041,7 @@ uint8_t writeCommand2(uint8_t cmd, uint8_t *data, uint8_t numBytes) {
   // BUSY already low — because the previous one never got acknowledged —
   // and proceeds as if the transition succeeded.
   waitForIdle(BUSY_WAIT, const_cast<char *>("end writeCommand2"), false);
-  return 0;
+  return status;
 }
 
 void readCommand(uint8_t cmd, uint8_t *data, uint8_t numBytes) {

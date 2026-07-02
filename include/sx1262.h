@@ -538,6 +538,8 @@ void setCad();
 uint8_t getStatus(void);
 uint16_t getIrqStatus(void);
 void clearIrqStatus(uint16_t irq);
+uint16_t getDeviceErrors(void);
+void clearDeviceErrors(void);
 void setTxEnable(void);
 void setRxEnable(void);
 void setRx(uint32_t timeout);
