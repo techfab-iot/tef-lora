@@ -17,14 +17,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
+#include "tef/boards/testbed.h"
 #include "tef/lora.h"
 namespace sensor = ::app::modules::sensors;
 
-static constexpr gpio_num_t kGpioReset = GPIO_NUM_18;
-static constexpr gpio_num_t kGpioCs = GPIO_NUM_17;  // NSS
-static constexpr gpio_num_t kGpioSck = GPIO_NUM_16;
-static constexpr gpio_num_t kGpioMiso = GPIO_NUM_7;
-static constexpr gpio_num_t kGpioMosi = GPIO_NUM_15;
+namespace board = tef::boards::testbed::v0_3_2;
 static constexpr double kVoltageMultiplier = 431993;
 static constexpr double kCurrentMultiplier = 11135;
 static constexpr double kActivePowerMultiplier = 9626328;
@@ -92,8 +89,9 @@ void wifi_init_sta(const char* ssid, const char* password) {
 
 extern "C" void app_main() {
   esp_log_level_set("*", ESP_LOG_ERROR);
+  constexpr auto pins = board::kLoraRadioPins;
   tef::lora::sx1276::setPins(
-    kGpioReset, kGpioCs, kGpioSck, kGpioMiso, kGpioMosi);
+    pins.rst, pins.nss, pins.sck, pins.miso, pins.mosi);
   if (tef::lora::sx1276::init() == 0) {
     ESP_LOGE(pcTaskGetName(NULL), "Does not recognize the module");
     while (1) {

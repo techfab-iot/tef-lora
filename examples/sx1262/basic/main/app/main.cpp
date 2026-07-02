@@ -11,18 +11,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "sx1262.h"
+#include "tef/boards/meshlink_gateway.h"
 
 static const char *TAG = "MAIN";
 
-// Estação TEF — ESP32-C6 + RA-01SH (SX1262)
-static constexpr gpio_num_t kGpioReset = GPIO_NUM_4;   // LORA_RST
-static constexpr gpio_num_t kGpioCs    = GPIO_NUM_15;  // LORA_NSS
-static constexpr gpio_num_t kGpioSck   = GPIO_NUM_21;  // LORA_SCK
-static constexpr gpio_num_t kGpioMiso  = GPIO_NUM_22;  // LORA_MISO
-static constexpr gpio_num_t kGpioMosi  = GPIO_NUM_23;  // LORA_MOSI
-static constexpr gpio_num_t kGpioBusy  = GPIO_NUM_20;  // LORA_BUSY
-static constexpr gpio_num_t kGpioTxen  = GPIO_NUM_NC;
-static constexpr gpio_num_t kGpioRxen  = GPIO_NUM_NC;
+namespace board = tef::boards::meshlink_gateway::v0_5_0;
 
 #if CONFIG_SENDER
 void task_tx(void *pvParameters) {
@@ -51,32 +44,13 @@ void task_tx(void *pvParameters) {
 }
 #endif  // CONFIG_SENDER
 
-#if CONFIG_RECEIVER
-void task_rx(void *pvParameters) {
-  ESP_LOGI(pcTaskGetName(NULL), "Start");
-  uint8_t buf[256];  // Maximum Payload size of SX1261/62/68 is 255
-  while (1) {
-    uint8_t rxLen = tef::lora::sx1262::receive(buf, sizeof(buf));
-    if (rxLen > 0) {
-      ESP_LOGI(
-        pcTaskGetName(NULL), "%d byte packet received:[%.*s]", rxLen, rxLen,
-        buf);
-
-      int8_t rssi, snr;
-      tef::lora::sx1262::getPacketStatus(&rssi, &snr);
-      ESP_LOGI(pcTaskGetName(NULL), "rssi=%d[dBm] snr=%d[dB]", rssi, snr);
-    }
-    vTaskDelay(1);  // Avoid WatchDog alerts
-  }  // end while
-}
-#endif  // CONFIG_RECEIVER
-
 extern "C" void app_main() {
   // Initialize LoRa
+  constexpr auto pins = board::kLoraRadioPins;
   tef::lora::sx1262::init(
-    kGpioReset, kGpioCs, kGpioSck, kGpioMiso, kGpioMosi, kGpioBusy, kGpioTxen,
-    kGpioRxen);
-  tef::lora::sx1262::debugPrint(true);
+    pins.rst, pins.nss, pins.sck, pins.miso, pins.mosi, pins.busy, pins.dio1,
+    pins.txen, pins.rxen);
+  tef::lora::sx1262::debugPrint(false);
   int8_t txPowerInDbm = 22;
 
   uint32_t frequencyInHz = 0;
@@ -94,15 +68,9 @@ extern "C" void app_main() {
   frequencyInHz = CONFIG_OTHER_FREQUENCY * 1000000;
 #endif
 
-#if CONFIG_USE_TCXO
-  ESP_LOGW(TAG, "Enable TCXO %.1fV", (double)CONFIG_TCXO_VOLTAGE_MV / 1000.0);
-  float tcxoVoltage = CONFIG_TCXO_VOLTAGE_MV / 1000.0f;
-  bool useRegulatorLDO = true;  // use DCDC + LDO
-#else
-  ESP_LOGW(TAG, "Disable TCXO");
-  float tcxoVoltage = 0.0;       // don't use TCXO
-  bool useRegulatorLDO = false;  // use only LDO in all modes
-#endif
+  ESP_LOGW(TAG, "Enable TCXO %.1fV", (double)board::kLoraTcxoVoltage);
+  float tcxoVoltage = board::kLoraUseTcxo ? board::kLoraTcxoVoltage : 0.0f;
+  bool useRegulatorLDO = board::kLoraUseRegulatorLdo;
 
   // LoRaDebugPrint(true);
   if (
@@ -134,6 +102,19 @@ extern "C" void app_main() {
   xTaskCreate(&task_tx, "TX", 1024 * 4, NULL, 5, NULL);
 #endif
 #if CONFIG_RECEIVER
-  xTaskCreate(&task_rx, "RX", 1024 * 4, NULL, 5, NULL);
+  ESP_LOGI(TAG, "RX loop start");
+  uint8_t buf[256];  // Maximum Payload size of SX1261/62/68 is 255
+  while (1) {
+    uint8_t rxLen = tef::lora::sx1262::receive(buf, sizeof(buf));
+    if (rxLen > 0) {
+      ESP_LOGI(
+        TAG, "%d byte packet received:[%.*s]", rxLen, rxLen, buf);
+
+      int8_t rssi, snr;
+      tef::lora::sx1262::getPacketStatus(&rssi, &snr);
+      ESP_LOGI(TAG, "rssi=%d[dBm] snr=%d[dB]", rssi, snr);
+    }
+    vTaskDelay(1);  // Avoid WatchDog alerts
+  }
 #endif
 }

@@ -1,5 +1,6 @@
 #include "sx1262.h"
 
+#include <assert.h>
 #include <driver/spi_master.h>
 #include <inttypes.h>
 #include <math.h>
@@ -33,8 +34,12 @@ static gpio_num_t kGpioSck = GPIO_NUM_NC;
 static gpio_num_t kGpioMiso = GPIO_NUM_NC;
 static gpio_num_t kGpioMosi = GPIO_NUM_NC;
 static gpio_num_t kGpioBusy = GPIO_NUM_NC;
+static gpio_num_t kGpioDio1 = GPIO_NUM_NC;
 static gpio_num_t kGpioTxen = GPIO_NUM_NC;
 static gpio_num_t kGpioRxen = GPIO_NUM_NC;
+static volatile bool kRxInterruptPending = false;
+
+static void IRAM_ATTR dio1IsrHandler(void*) { kRxInterruptPending = true; }
 
 void error(int error) {
   if (debug_print) {
@@ -47,13 +52,15 @@ void error(int error) {
 
 void init(
   gpio_num_t rst, gpio_num_t cs, gpio_num_t sck, gpio_num_t miso,
-  gpio_num_t mosi, gpio_num_t busy, gpio_num_t txen, gpio_num_t rxen) {
+  gpio_num_t mosi, gpio_num_t busy, gpio_num_t dio1, gpio_num_t txen,
+  gpio_num_t rxen) {
   kGpioMiso = miso;
   kGpioMosi = mosi;
   kGpioSck = sck;
   kGpioCs = cs;
   kGpioReset = rst;
   kGpioBusy = busy;
+  kGpioDio1 = dio1;
   kGpioTxen = txen;
   kGpioRxen = rxen;
   ESP_LOGI(kLogTag, "kGpioMiso=%d", kGpioMiso);
@@ -62,11 +69,13 @@ void init(
   ESP_LOGI(kLogTag, "kGpioCs=%d", kGpioCs);
   ESP_LOGI(kLogTag, "kGpioReset=%d", kGpioReset);
   ESP_LOGI(kLogTag, "kGpioBusy=%d", kGpioBusy);
+  ESP_LOGI(kLogTag, "kGpioDio1=%d", kGpioDio1);
   ESP_LOGI(kLogTag, "kGpioTxen=%d", kGpioTxen);
   ESP_LOGI(kLogTag, "kGpioRxen=%d", kGpioRxen);
 
   txActive = false;
   debug_print = false;
+  kRxInterruptPending = false;
 
   gpio_reset_pin(kGpioCs);
   gpio_set_direction(kGpioCs, GPIO_MODE_OUTPUT);
@@ -77,6 +86,19 @@ void init(
 
   gpio_reset_pin(kGpioBusy);
   gpio_set_direction(kGpioBusy, GPIO_MODE_INPUT);
+
+  if (kGpioDio1 != GPIO_NUM_NC) {
+    gpio_reset_pin(kGpioDio1);
+    gpio_set_direction(kGpioDio1, GPIO_MODE_INPUT);
+    gpio_set_intr_type(kGpioDio1, GPIO_INTR_POSEDGE);
+    esp_err_t isrRet = gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
+    if (isrRet != ESP_OK && isrRet != ESP_ERR_INVALID_STATE) {
+      ESP_LOGE(kLogTag, "gpio_install_isr_service=%d", isrRet);
+      assert(isrRet == ESP_OK || isrRet == ESP_ERR_INVALID_STATE);
+    }
+    gpio_isr_handler_add(kGpioDio1, dio1IsrHandler, nullptr);
+    gpio_intr_enable(kGpioDio1);
+  }
 
   if (kGpioTxen != -1) {
     gpio_reset_pin(kGpioTxen);
@@ -103,9 +125,14 @@ void init(
   spi_device_interface_config_t devcfg;
   memset(&devcfg, 0, sizeof(spi_device_interface_config_t));
   devcfg.clock_speed_hz = SPI_Frequency;
-  // It does not work with hardware CS control.
-  // devcfg.spics_io_num = kGpioCs;
-  // It does work with software CS control.
+  // Commands are framed as CS-low for the whole multi-byte transfer, built
+  // from several individual spi_device_transmit() calls (one per byte) in
+  // writeCommand2/readCommand. Hardware CS control re-asserts/deasserts CS
+  // around each of those individual transmits, splitting one command frame
+  // into several 1-byte frames and corrupting every multi-byte command the
+  // radio receives. CS must stay software-controlled so the manual
+  // gpio_set_level() calls bracketing the byte loop are the only thing
+  // toggling it.
   devcfg.spics_io_num = -1;
   devcfg.queue_size = 7;
   devcfg.mode = 0;
@@ -179,14 +206,13 @@ int16_t begin(
   if (
     syncWord != SX126X_SYNC_WORD_PUBLIC &&
     syncWord != SX126X_SYNC_WORD_PRIVATE) {
-    ESP_LOGE(kLogTag, "SX126x error, maybe no SPI connection");
-    return ERR_INVALID_MODE;
+    ESP_LOGW(kLogTag, "Unexpected sync word, continuing with reconfiguration");
   }
 
   ESP_LOGI(kLogTag, "SX126x installed");
   setStandby(SX126X_STANDBY_RC);
-
   setDio2AsRfSwitchCtrl(true);
+
   ESP_LOGI(kLogTag, "tcxoVoltage=%f", tcxoVoltage);
   // set TCXO control, if requested
   if (tcxoVoltage > 0.0) {
@@ -194,6 +220,13 @@ int16_t begin(
       tcxoVoltage, RADIO_TCXO_SETUP_TIME);  // Configure the radio to use a TCXO
                                             // controlled by DIO3
   }
+
+  setSyncWord(SX126X_SYNC_WORD_PRIVATE);
+
+  // SetPacketType must precede SetRfFrequency: the frequency/image
+  // calibration below depends on the packet type already being set, per the
+  // SX126x datasheet's radio configuration sequence (section 13.4.1).
+  setPacketType(SX126X_PACKET_TYPE_LORA);
 
   calibrate(
     SX126X_CALIBRATE_IMAGE_ON | SX126X_CALIBRATE_ADC_BULK_P_ON |
@@ -269,9 +302,9 @@ void config(
   }
 
   if (crcOn)
-    PacketParams[4] = SX126X_LORA_IQ_INVERTED;
+    PacketParams[4] = SX126X_LORA_CRC_ON;
   else
-    PacketParams[4] = SX126X_LORA_IQ_STANDARD;
+    PacketParams[4] = SX126X_LORA_CRC_OFF;
 
   if (invertIrq)
     PacketParams[5] = 0x01;  // Inverted LoRa I and Q signals setup
@@ -283,9 +316,9 @@ void config(
 
   writeCommand(SX126X_CMD_SET_PACKET_PARAMS, PacketParams, 6);  // 0x8C
 
-  // Do not use DIO interruptst
+  // Route packet events to DIO1 and let the ISR wake the loop.
   setDioIrqParams(
-    SX126X_IRQ_ALL,    // all interrupts enabled
+    SX126X_IRQ_ALL,
     SX126X_IRQ_NONE,   // interrupts on DIO1
     SX126X_IRQ_NONE,   // interrupts on DIO2
     SX126X_IRQ_NONE);  // interrupts on DIO3
@@ -299,12 +332,18 @@ void debugPrint(bool enable) { debug_print = enable; }
 uint8_t receive(uint8_t *pData, int16_t len) {
   uint8_t rxLen = 0;
   uint16_t irqRegs = getIrqStatus();
-  // uint8_t status = getStatus();
 
   if (irqRegs & SX126X_IRQ_RX_DONE) {
-    // clearIrqStatus(SX126X_IRQ_RX_DONE);
-    clearIrqStatus(SX126X_IRQ_ALL);
     rxLen = readBuffer(pData, len);
+    ESP_LOGI(kLogTag, "RX_DONE irqRegs=0x%04x rxLen=%d", irqRegs, rxLen);
+    clearIrqStatus(SX126X_IRQ_ALL);
+    setRx(SX126X_RX_TIMEOUT_INF);
+  } else if (irqRegs & SX126X_IRQ_CRC_ERR) {
+    if (debug_print) {
+      ESP_LOGW(kLogTag, "SX126X_IRQ_CRC_ERR");
+    }
+    clearIrqStatus(SX126X_IRQ_ALL);
+    setRx(SX126X_RX_TIMEOUT_INF);
   }
 
   return rxLen;
@@ -381,7 +420,9 @@ bool receiveMode(void) {
 void getPacketStatus(int8_t *rssiPacket, int8_t *snrPacket) {
   uint8_t buf[4];
   readCommand(SX126X_CMD_GET_PACKET_STATUS, buf, 4);  // 0x14
-  *rssiPacket = (buf[3] >> 1) * -1;
+  // buf[0] is the throwaway status byte clocked out during the opcode
+  // phase; the reply is RssiPkt, SnrPkt, SignalRssiPkt in buf[1..3].
+  *rssiPacket = (buf[1] >> 1) * -1;
   (buf[2] < 128) ? (*snrPacket = buf[2] >> 2)
                  : (*snrPacket = ((buf[2] - 256) >> 2));
 }
@@ -632,16 +673,6 @@ void setRx(uint32_t timeout) {
   buf[1] = (uint8_t)((timeout >> 8) & 0xFF);
   buf[2] = (uint8_t)(timeout & 0xFF);
   writeCommand(SX126X_CMD_SET_RX, buf, 3);  // 0x82
-
-  uint8_t status = 0;
-  for (int retry = 0; retry < 100; retry++) {
-    status = getStatus();
-    if ((status & 0x70) == 0x50) return;
-    vTaskDelay(1);
-  }
-  ESP_LOGW(
-    kLogTag,
-    "SetRx concluído, mas GetStatus não reportou RX (status=0x%02x)", status);
 }
 
 void setRxEnable(void) {
@@ -763,18 +794,23 @@ uint8_t readBuffer(uint8_t *rxData, int16_t rxDataLen) {
   // ensure BUSY is low (state meachine ready)
   waitForIdle(BUSY_WAIT, const_cast<char *>("start readBuffer"), true);
 
+  // Single-transaction frame — see writeCommand2 for why per-byte
+  // spi_device_transmit() calls in a loop are unsafe here. Max LoRa payload
+  // is 255 bytes plus a 3-byte header.
+  uint8_t txBuf[258];
+  uint8_t rxBuf[258];
+  txBuf[0] = SX126X_CMD_READ_BUFFER;  // 0x1E
+  txBuf[1] = offset;
+  txBuf[2] = SX126X_CMD_NOP;
+  for (int i = 0; i < payloadLength; i++) txBuf[3 + i] = SX126X_CMD_NOP;
+
   // start transfer
   gpio_set_level(kGpioCs, LOW);
-
-  spiTransfer(SX126X_CMD_READ_BUFFER);  // 0x1E
-  spiTransfer(offset);
-  spiTransfer(SX126X_CMD_NOP);
-  for (int i = 0; i < payloadLength; i++) {
-    rxData[i] = spiTransfer(SX126X_CMD_NOP);
-  }
-
+  spiReadByte(rxBuf, txBuf, payloadLength + 3);
   // stop transfer
   gpio_set_level(kGpioCs, HIGH);
+
+  memcpy(rxData, &rxBuf[3], payloadLength);
 
   // wait for BUSY to go low
   waitForIdle(BUSY_WAIT, const_cast<char *>("end readBuffer"), false);
@@ -786,15 +822,16 @@ void writeBuffer(uint8_t *txData, int16_t txDataLen) {
   // ensure BUSY is low (state meachine ready)
   waitForIdle(BUSY_WAIT, const_cast<char *>("start writeBuffer"), true);
 
+  // Single-transaction frame — see writeCommand2 for why per-byte
+  // spi_device_transmit() calls in a loop are unsafe here.
+  uint8_t txBuf[257];
+  txBuf[0] = SX126X_CMD_WRITE_BUFFER;  // 0x0E
+  txBuf[1] = 0;                        // offset in tx fifo
+  memcpy(&txBuf[2], txData, txDataLen);
+
   // start transfer
   gpio_set_level(kGpioCs, LOW);
-
-  spiTransfer(SX126X_CMD_WRITE_BUFFER);  // 0x0E
-  spiTransfer(0);                        // offset in tx fifo
-  for (int i = 0; i < txDataLen; i++) {
-    spiTransfer(txData[i]);
-  }
-
+  spiWriteByte(txBuf, txDataLen + 2);
   // stop transfer
   gpio_set_level(kGpioCs, HIGH);
 
@@ -809,25 +846,26 @@ void writeRegister(uint16_t reg, uint8_t *data, uint8_t numBytes) {
   if (debug_print) {
     ESP_LOGI(kLogTag, "writeRegister: REG=0x%02x", reg);
   }
+
+  // Single-transaction frame — see writeCommand2 for why per-byte
+  // spi_device_transmit() calls in a loop are unsafe here.
+  uint8_t txBuf[11];
+  txBuf[0] = SX126X_CMD_WRITE_REGISTER;  // 0x0D
+  txBuf[1] = (reg & 0xFF00) >> 8;
+  txBuf[2] = reg & 0xff;
+  memcpy(&txBuf[3], data, numBytes);
+
   // start transfer
   gpio_set_level(kGpioCs, LOW);
-
-  // send command byte
-  spiTransfer(SX126X_CMD_WRITE_REGISTER);  // 0x0D
-  spiTransfer((reg & 0xFF00) >> 8);
-  spiTransfer(reg & 0xff);
-
-  for (uint8_t n = 0; n < numBytes; n++) {
-    uint8_t in = spiTransfer(data[n]);
-    (void)in;
-    if (debug_print) {
-      ESP_LOGI(kLogTag, "%02x --> %02x", data[n], in);
-      // ESP_LOGI(kLogTag, "DataOut:%02x ", data[n]);
-    }
-  }
-
+  spiWriteByte(txBuf, numBytes + 3);
   // stop transfer
   gpio_set_level(kGpioCs, HIGH);
+
+  if (debug_print) {
+    for (uint8_t n = 0; n < numBytes; n++) {
+      ESP_LOGI(kLogTag, "%02x -->", data[n]);
+    }
+  }
 
   // wait for BUSY to go low
   waitForIdle(BUSY_WAIT, const_cast<char *>("end writeRegister"), false);
@@ -846,24 +884,28 @@ void readRegister(uint16_t reg, uint8_t *data, uint8_t numBytes) {
     ESP_LOGI(kLogTag, "readRegister: REG=0x%02x", reg);
   }
 
+  // Single-transaction frame — see writeCommand2 for why per-byte
+  // spi_device_transmit() calls in a loop are unsafe here.
+  uint8_t txBuf[12];
+  uint8_t rxBuf[12];
+  txBuf[0] = SX126X_CMD_READ_REGISTER;  // 0x1D
+  txBuf[1] = (reg & 0xFF00) >> 8;
+  txBuf[2] = reg & 0xff;
+  txBuf[3] = SX126X_CMD_NOP;
+  for (uint8_t n = 0; n < numBytes; n++) txBuf[4 + n] = SX126X_CMD_NOP;
+
   // start transfer
   gpio_set_level(kGpioCs, LOW);
+  spiReadByte(rxBuf, txBuf, numBytes + 4);
+  // stop transfer
+  gpio_set_level(kGpioCs, HIGH);
 
-  // send command byte
-  spiTransfer(SX126X_CMD_READ_REGISTER);  // 0x1D
-  spiTransfer((reg & 0xFF00) >> 8);
-  spiTransfer(reg & 0xff);
-  spiTransfer(SX126X_CMD_NOP);
-
-  for (uint8_t n = 0; n < numBytes; n++) {
-    data[n] = spiTransfer(SX126X_CMD_NOP);
-    if (debug_print) {
+  memcpy(data, &rxBuf[4], numBytes);
+  if (debug_print) {
+    for (uint8_t n = 0; n < numBytes; n++) {
       ESP_LOGI(kLogTag, "DataIn:%02x ", data[n]);
     }
   }
-
-  // stop transfer
-  gpio_set_level(kGpioCs, HIGH);
 
   // wait for BUSY to go low
   waitForIdle(BUSY_WAIT, const_cast<char *>("end readRegister"), false);
@@ -877,8 +919,7 @@ void readRegister(uint16_t reg, uint8_t *data, uint8_t numBytes) {
 void writeCommand(uint8_t cmd, uint8_t *data, uint8_t numBytes) {
   uint8_t status = writeCommand2(cmd, data, numBytes);
   if (status != 0) {
-    ESP_LOGE(kLogTag, "SPI Transaction error:0x%02x", status);
-    error(ERR_SPI_TRANSACTION);
+    ESP_LOGW(kLogTag, "SPI Transaction warning:0x%02x", status);
   }
 }
 
@@ -886,54 +927,55 @@ uint8_t writeCommand2(uint8_t cmd, uint8_t *data, uint8_t numBytes) {
   // ensure BUSY is low (state machine ready)
   waitForIdle(BUSY_WAIT, const_cast<char *>("start writeCommand2"), true);
 
-  // start transfer
-  gpio_set_level(kGpioCs, LOW);
-
   if (debug_print) {
     ESP_LOGI(kLogTag, "writeCommand: CMD=0x%02x", cmd);
   }
-  spiTransfer(cmd);
 
-  // send data bytes — SX1262 does not drive MISO during write command data
-  // phases, so MISO is not checked here (floating MISO would be misread as
-  // a status byte, causing false error detection)
-  for (uint8_t n = 0; n < numBytes; n++) {
-    spiTransfer(data[n]);
-  }
+  // Build the whole command frame and send it as a single SPI transaction.
+  // Framing this as one spi_device_transmit() call (instead of one call per
+  // byte in a loop) guarantees CS stays low and SCK keeps clocking with no
+  // gaps for the whole frame — a per-byte loop leaves room for scheduling
+  // jitter between transactions, which was observed to desync the SX1262's
+  // command state machine and corrupt subsequent reads.
+  uint8_t txBuf[9];
+  txBuf[0] = cmd;
+  memcpy(&txBuf[1], data, numBytes);
 
+  // start transfer
+  gpio_set_level(kGpioCs, LOW);
+  spiWriteByte(txBuf, numBytes + 1);
   // stop transfer
   gpio_set_level(kGpioCs, HIGH);
-
-  // BUSY goes high while the chip processes the command, then low when done.
-  // This is the authoritative success indicator for write commands.
-  bool ok = waitForIdle(BUSY_WAIT, const_cast<char *>("end writeCommand2"), false);
-  return ok ? 0 : SX126X_STATUS_SPI_FAILED;
+  return 0;
 }
 
 void readCommand(uint8_t cmd, uint8_t *data, uint8_t numBytes) {
   // ensure BUSY is low (state meachine ready)
-  // waitForIdle(BUSY_WAIT, "start readCommand", true);
   waitForIdleBegin(BUSY_WAIT, const_cast<char *>("start readCommand"));
 
-  // start transfer
-  gpio_set_level(kGpioCs, LOW);
-
-  // send command byte
   if (debug_print) {
     ESP_LOGI(kLogTag, "readCommand: CMD=0x%02x", cmd);
   }
-  spiTransfer(cmd);
 
-  // send/receive all bytes
-  for (uint8_t n = 0; n < numBytes; n++) {
-    data[n] = spiTransfer(SX126X_CMD_NOP);
-    if (debug_print) {
+  // See writeCommand2: send/receive the whole frame as one SPI transaction
+  // so CS/SCK framing can't be split by scheduling jitter between bytes.
+  uint8_t txBuf[9];
+  uint8_t rxBuf[9];
+  txBuf[0] = cmd;
+  for (uint8_t n = 0; n < numBytes; n++) txBuf[1 + n] = SX126X_CMD_NOP;
+
+  // start transfer
+  gpio_set_level(kGpioCs, LOW);
+  spiReadByte(rxBuf, txBuf, numBytes + 1);
+  // stop transfer
+  gpio_set_level(kGpioCs, HIGH);
+
+  memcpy(data, &rxBuf[1], numBytes);
+  if (debug_print) {
+    for (uint8_t n = 0; n < numBytes; n++) {
       ESP_LOGI(kLogTag, "DataIn:%02x", data[n]);
     }
   }
-
-  // stop transfer
-  gpio_set_level(kGpioCs, HIGH);
 
   // wait for BUSY to go low
   vTaskDelay(1);

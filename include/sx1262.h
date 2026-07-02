@@ -487,7 +487,8 @@ namespace tef::lora::sx1262 {
 // Public function
 void init(
   gpio_num_t rst, gpio_num_t cs, gpio_num_t sck, gpio_num_t miso,
-  gpio_num_t mosi, gpio_num_t busy, gpio_num_t txen, gpio_num_t rxen);
+  gpio_num_t mosi, gpio_num_t busy, gpio_num_t dio1, gpio_num_t txen,
+  gpio_num_t rxen);
 int16_t begin(
   uint32_t frequencyInHz, int8_t txPowerInDbm, float tcxoVoltage,
   bool useRegulatorLDO);
