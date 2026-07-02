@@ -6,7 +6,8 @@ dependencies:
     git: git@github.com:techfab-iot/tef-lora.git
     version: "develop"
   techfab-iot/tef-boards:
-    override_path: "../../../../../tef-boards"
+    git: git@github.com:techfab-iot/tef-boards.git
+    version: main
   techfab-iot/tef-mesh:
     git: git@github.com:techfab-iot/tef-mesh.git
     version: 0.5.2
