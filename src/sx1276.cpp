@@ -4,55 +4,10 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "tef/lora.h"
+#include "sx1276_defs.h"
 
 namespace tef::lora::sx1276 {
 static constexpr auto kLogTag = "lora";
-
-// Register definitions
-static constexpr int kRegFifo = 0x00;
-static constexpr int kRegOpMode = 0x01;
-static constexpr int kRegFrfMsb = 0x06;
-static constexpr int kRegFrfMid = 0x07;
-static constexpr int kRegFrfLsb = 0x08;
-static constexpr int kRegPaConfig = 0x09;
-static constexpr int kRegLna = 0x0c;
-static constexpr int kRegFifoAddrPtr = 0x0d;
-static constexpr int kRegFifoTxBaseAddr = 0x0e;
-static constexpr int kRegFifoRxBaseAddr = 0x0f;
-static constexpr int kRegFifoRxCurrentAddr = 0x10;
-static constexpr int kRegIrqFlags = 0x12;
-static constexpr int kRegRxNbBytes = 0x13;
-static constexpr int kRegPktSnrValue = 0x19;
-static constexpr int kRegPktRssiValue = 0x1a;
-static constexpr int kRegModemConfig1 = 0x1d;
-static constexpr int kRegModemConfig2 = 0x1e;
-static constexpr int kRegPreambleMsb = 0x20;
-static constexpr int kRegPreambleLsb = 0x21;
-static constexpr int kRegPayloadLength = 0x22;
-static constexpr int kRegModemConfig3 = 0x26;
-static constexpr int kRegRssiWideband = 0x2c;
-static constexpr int kRegDetectionOptimize = 0x31;
-static constexpr int kRegDetectionThreshold = 0x37;
-static constexpr int kRegSyncWord = 0x39;
-static constexpr int kRegDioMapping1 = 0x40;
-static constexpr int kRegDioMapping2 = 0x41;
-static constexpr int kRegVersion = 0x42;
-// Transceiver modes
-static constexpr int kModeLongRangeMode = 0x80;
-static constexpr int kModeSleep = 0x00;
-static constexpr int kModeStdby = 0x01;
-static constexpr int kModeTx = 0x03;
-static constexpr int kModeRxContinuous = 0x05;
-static constexpr int kModeRxSingle = 0x06;
-// PA configuration
-static constexpr int kPaBoost = 0x80;
-// IRQ masks
-static constexpr int kIrqTxDoneMask = 0x08;
-static constexpr int kIrqPayloadCrcErrorMask = 0x20;
-static constexpr int kIrqRxDoneMask = 0x40;
-static constexpr int kPaOutputRfoPin = 0;
-static constexpr int kPaOutputPaBoostPin = 1;
-static constexpr int kTimeoutReset = 100;
 
 // GPIO Pins
 static gpio_num_t kGpioReset = GPIO_NUM_NC;
@@ -376,6 +331,23 @@ void setBandwidth(int sbw) {
   }
 }
 
+void setBandwidth(tef::lora::Bandwidth bw) {
+  int sbw = 7;
+  switch (bw) {
+    case tef::lora::Bandwidth::k7_8KHz: sbw = 0; break;
+    case tef::lora::Bandwidth::k10_4KHz: sbw = 1; break;
+    case tef::lora::Bandwidth::k15_6KHz: sbw = 2; break;
+    case tef::lora::Bandwidth::k20_8KHz: sbw = 3; break;
+    case tef::lora::Bandwidth::k31_25KHz: sbw = 4; break;
+    case tef::lora::Bandwidth::k41_7KHz: sbw = 5; break;
+    case tef::lora::Bandwidth::k62_5KHz: sbw = 6; break;
+    case tef::lora::Bandwidth::k125KHz: sbw = 7; break;
+    case tef::lora::Bandwidth::k250KHz: sbw = 8; break;
+    case tef::lora::Bandwidth::k500KHz: sbw = 9; break;
+  }
+  setBandwidth(sbw);
+}
+
 /**
  * Get bandwidth (bit rate)
  * @param sbw Signal bandwidth(0 to 9)
@@ -404,6 +376,10 @@ void setCodingRate(int cr) {
     cr = 4;
   writeReg(kRegModemConfig1, (readReg(kRegModemConfig1) & 0xf1) | (cr << 1));
   _cr = cr;
+}
+
+void setCodingRate(tef::lora::CodingRate cr) {
+  setCodingRate(static_cast<int>(cr));
 }
 
 /**
@@ -529,6 +505,22 @@ int init(void) {
 
   idle();
   return 1;
+}
+
+int init(
+  gpio_num_t rst, gpio_num_t cs, gpio_num_t sck, gpio_num_t miso,
+  gpio_num_t mosi, gpio_num_t busy, gpio_num_t dio1, gpio_num_t txen,
+  gpio_num_t rxen) {
+  (void)busy;
+  (void)dio1;
+  (void)txen;
+  (void)rxen;
+  kGpioReset = rst;
+  kGpioCs = cs;
+  kGpioSck = sck;
+  kGpioMiso = miso;
+  kGpioMosi = mosi;
+  return init();
 }
 
 /**
@@ -683,17 +675,93 @@ void dumpRegisters(void) {
   printf("\n");
 }
 
-void setPins(
-  gpio_num_t rst, gpio_num_t cs, gpio_num_t sck, gpio_num_t miso,
-  gpio_num_t mosi) {
-  kGpioReset = rst;
-  kGpioCs = cs;
-  kGpioSck = sck;
-  kGpioMiso = miso;
-  kGpioMosi = mosi;
-}
 void setClockSpeed(int speed) { clock_speed = speed; }
 
 void setSpiHost(spi_host_device_t host) { kHostId = host; }
+
+int16_t begin(
+  uint32_t frequencyInHz, int8_t txPowerInDbm, float tcxoVoltage,
+  bool useRegulatorLDO) {
+  (void)tcxoVoltage;
+  (void)useRegulatorLDO;
+
+  setFrequency(static_cast<long>(frequencyInHz));
+  setTxPower(txPowerInDbm);
+  return 0;
+}
+
+void config(
+  uint8_t spreadingFactor, uint8_t bandwidth, uint8_t codingRate,
+  uint16_t preambleLength, uint8_t payloadLen, bool crcOn, bool invertIrq) {
+  setSpreadingFactor(spreadingFactor);
+  setBandwidth(bandwidth);
+  setCodingRate(codingRate);
+  setPreambleLength(preambleLength);
+  if (crcOn) {
+    enableCrc();
+  } else {
+    disableCrc();
+  }
+  if (payloadLen == 0) {
+    explicitHeaderMode();
+  } else {
+    implicitHeaderMode(payloadLen);
+  }
+  (void)invertIrq;
+}
+
+void config(
+  uint8_t spreadingFactor, tef::lora::Bandwidth bandwidth,
+  tef::lora::CodingRate codingRate, uint16_t preambleLength,
+  uint8_t payloadLen, bool crcOn, bool invertIrq) {
+  setSpreadingFactor(spreadingFactor);
+  setBandwidth(bandwidth);
+  setCodingRate(codingRate);
+  setPreambleLength(preambleLength);
+  if (crcOn) {
+    enableCrc();
+  } else {
+    disableCrc();
+  }
+  if (payloadLen == 0) {
+    explicitHeaderMode();
+  } else {
+    implicitHeaderMode(payloadLen);
+  }
+  (void)invertIrq;
+}
+
+uint8_t receive(uint8_t *pData, int16_t len) {
+  receive();
+  if (!received()) {
+    return 0;
+  }
+  return static_cast<uint8_t>(receivePacket(pData, len));
+}
+
+bool send(uint8_t *pData, int16_t len, uint8_t mode) {
+  sendPacket(pData, len);
+  if (mode & static_cast<uint8_t>(tef::lora::TxMode::kBackToRx)) {
+    receive();
+  }
+  return true;
+}
+
+bool send(uint8_t *pData, int16_t len, tef::lora::TxMode mode) {
+  return send(pData, len, static_cast<uint8_t>(mode));
+}
+
+void debugPrint(bool enable) {
+  (void)enable;
+}
+
+void getPacketStatus(int8_t *rssiPacket, int8_t *snrPacket) {
+  if (rssiPacket != nullptr) {
+    *rssiPacket = static_cast<int8_t>(packetRssi());
+  }
+  if (snrPacket != nullptr) {
+    *snrPacket = static_cast<int8_t>(packetSnr());
+  }
+}
 
 }  // namespace tef::lora::sx1276

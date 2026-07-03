@@ -1,4 +1,5 @@
-#include "sx1262.h"
+#include "tef/lora.h"
+#include "sx1262_defs.h"
 
 #include <assert.h>
 #include <driver/spi_master.h>
@@ -375,6 +376,36 @@ void config(
   setRx(0xFFFFFF);
 }
 
+void config(
+  uint8_t spreadingFactor, tef::lora::Bandwidth bandwidth,
+  tef::lora::CodingRate codingRate, uint16_t preambleLength,
+  uint8_t payloadLen, bool crcOn, bool invertIrq) {
+  uint8_t bw = SX126X_LORA_BW_125_0;
+  switch (bandwidth) {
+    case tef::lora::Bandwidth::k7_8KHz: bw = SX126X_LORA_BW_7_8; break;
+    case tef::lora::Bandwidth::k10_4KHz: bw = SX126X_LORA_BW_10_4; break;
+    case tef::lora::Bandwidth::k15_6KHz: bw = SX126X_LORA_BW_15_6; break;
+    case tef::lora::Bandwidth::k20_8KHz: bw = SX126X_LORA_BW_20_8; break;
+    case tef::lora::Bandwidth::k31_25KHz: bw = SX126X_LORA_BW_31_25; break;
+    case tef::lora::Bandwidth::k41_7KHz: bw = SX126X_LORA_BW_41_7; break;
+    case tef::lora::Bandwidth::k62_5KHz: bw = SX126X_LORA_BW_62_5; break;
+    case tef::lora::Bandwidth::k125KHz: bw = SX126X_LORA_BW_125_0; break;
+    case tef::lora::Bandwidth::k250KHz: bw = SX126X_LORA_BW_250_0; break;
+    case tef::lora::Bandwidth::k500KHz: bw = SX126X_LORA_BW_500_0; break;
+  }
+
+  uint8_t cr = SX126X_LORA_CR_4_5;
+  switch (codingRate) {
+    case tef::lora::CodingRate::k4_5: cr = SX126X_LORA_CR_4_5; break;
+    case tef::lora::CodingRate::k4_6: cr = SX126X_LORA_CR_4_6; break;
+    case tef::lora::CodingRate::k4_7: cr = SX126X_LORA_CR_4_7; break;
+    case tef::lora::CodingRate::k4_8: cr = SX126X_LORA_CR_4_8; break;
+  }
+
+  config(
+    spreadingFactor, bw, cr, preambleLength, payloadLen, crcOn, invertIrq);
+}
+
 void debugPrint(bool enable) { debug_print = enable; }
 
 uint8_t receive(uint8_t *pData, int16_t len) {
@@ -413,7 +444,7 @@ bool send(uint8_t *pData, int16_t len, uint8_t mode) {
     writeBuffer(pData, len);
     setTx(500);
 
-    if (mode & SX126x_TXMODE_SYNC) {
+    if (mode & static_cast<uint8_t>(tef::lora::TxMode::kSync)) {
       irqStatus = getIrqStatus();
       while ((!(irqStatus & SX126X_IRQ_TX_DONE)) &&
              (!(irqStatus & SX126X_IRQ_TIMEOUT))) {
@@ -445,6 +476,10 @@ bool send(uint8_t *pData, int16_t len, uint8_t mode) {
   }
   if (rv == false) txLost++;
   return rv;
+}
+
+bool send(uint8_t *pData, int16_t len, tef::lora::TxMode mode) {
+  return send(pData, len, static_cast<uint8_t>(mode));
 }
 
 bool receiveMode(void) {
