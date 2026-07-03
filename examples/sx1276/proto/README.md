@@ -1,1 +1,0 @@
-# Exemplo básico de envio LoRa utilizando empacotamento proto

@@ -1,0 +1,13 @@
+dependencies:
+  techfab-iot/tef-lora:
+    version: "*"
+    override_path: ../../..
+    # remover essa linha
+    # git: git@github.com:techfab-iot/tef-lora.git
+  techfab-iot/tef-boards:
+    version: '*'
+    git: git@github.com:techfab-iot/tef-boards.git
+
+  ## Required IDF version
+  idf:
+    version: 5.5.4

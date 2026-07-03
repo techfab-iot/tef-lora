@@ -1,0 +1,10 @@
+# Note: if you have increased the bootloader size, make sure to update the offsets to avoid overlap
+# Name,   Type, SubType, Offset,  Size, Flags
+coredump, data, coredump, ,        64K,
+nvs,      data, nvs,      ,        24K,
+phy_init, data, phy,      ,        4K,
+otadata,  data, ota,      ,        8K,
+ota_0,    app,  ota_0,    ,        2048K,
+ota_1,    app,  ota_1,    ,        2048K,
+user_nvs, data, nvs,      ,        24K,
+storage,  data, spiffs,   ,        2496K,
