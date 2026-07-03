@@ -6,5 +6,10 @@ examples/*/*/dependencies.lock
 examples/*/*/sdkconfig
 examples/*/*/sdkconfig.old
 examples/*/*/managed_components
+examples/*/.env
+examples/*/dependencies.lock
+examples/*/sdkconfig
+examples/*/sdkconfig.old
+examples/*/managed_components
 .vscode
 build
