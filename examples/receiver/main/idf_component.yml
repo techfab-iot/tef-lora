@@ -1,0 +1,7 @@
+dependencies:
+  techfab-iot/tef-boards:
+    version: "*"
+    path: /home/petrus/Documents/Projetos/techfab/tef/tef-boards
+
+  idf:
+    version: 5.5.4
