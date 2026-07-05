@@ -42,13 +42,15 @@ static volatile bool kRxInterruptPending = false;
 
 static void IRAM_ATTR dio1IsrHandler(void*) { kRxInterruptPending = true; }
 
+// Antes: hangava a task chamadora para sempre (while(true){vTaskDelay(1);}),
+// independente de debug_print. Um erro de setRx/setTx/waitForIdle (ex.:
+// pinagem física errada que faz o chip nunca sair de STANDBY) travava
+// silenciosamente todo o boot do device chamador, sem log em builds sem
+// debug_print — a app nunca descobria que o rádio nunca vai funcionar.
+// Agora só loga (sempre, não só em debug) e retorna — quem chamou a função
+// que disparou o erro decide o que fazer via seu próprio retorno de status.
 void error(int error) {
-  if (debug_print) {
-    ESP_LOGE(kLogTag, "LoRaErrorDefault=%d", error);
-  }
-  while (true) {
-    vTaskDelay(1);
-  }
+  ESP_LOGE(kLogTag, "LoRaErrorDefault=%d", error);
 }
 
 void init(
@@ -328,7 +330,7 @@ void fixInvertedIQ(uint8_t iqConfig) {
   writeRegister(SX126X_REG_IQ_POLARITY_SETUP, &iqConfigCurrent, 1);  // 0x0736
 }
 
-void config(
+bool config(
   uint8_t spreadingFactor, uint8_t bandwidth, uint8_t codingRate,
   uint16_t preambleLength, uint8_t payloadLen, bool crcOn, bool invertIrq) {
   setStopRxTimerOnPreambleDetect(false);
@@ -372,11 +374,13 @@ void config(
     SX126X_IRQ_NONE,       // interrupts on DIO2
     SX126X_IRQ_NONE);      // interrupts on DIO3
 
-  // Receive state no receive timeoout
-  setRx(0xFFFFFF);
+  // Receive state no receive timeoout — reflete no retorno se o chip
+  // realmente confirmou RX (ver setRx()); antes disso era void e uma
+  // pinagem física errada passava despercebida (só log solto do driver).
+  return setRx(0xFFFFFF);
 }
 
-void config(
+bool config(
   uint8_t spreadingFactor, tef::lora::Bandwidth bandwidth,
   tef::lora::CodingRate codingRate, uint16_t preambleLength,
   uint8_t payloadLen, bool crcOn, bool invertIrq) {
@@ -402,7 +406,7 @@ void config(
     case tef::lora::CodingRate::k4_8: cr = SX126X_LORA_CR_4_8; break;
   }
 
-  config(
+  return config(
     spreadingFactor, bw, cr, preambleLength, payloadLen, crcOn, invertIrq);
 }
 
@@ -756,7 +760,7 @@ void clearDeviceErrors(void) {
   writeCommand(SX126X_CMD_CLEAR_DEVICE_ERRORS, buf, 2);  // 0x07
 }
 
-void setRx(uint32_t timeout) {
+bool setRx(uint32_t timeout) {
   if (debug_print) {
     ESP_LOGI(kLogTag, "----- setRx timeout=%" PRIu32, timeout);
   }
@@ -778,7 +782,9 @@ void setRx(uint32_t timeout) {
   if ((getStatus() & 0x70) != 0x50) {
     ESP_LOGE(kLogTag, "setRx Illegal Status");
     error(ERR_INVALID_SETRX_STATE);
+    return false;
   }
+  return true;
 }
 
 void setRxEnable(void) {
@@ -792,7 +798,7 @@ void setRxEnable(void) {
   }
 }
 
-void setTx(uint32_t timeoutInMs) {
+bool setTx(uint32_t timeoutInMs) {
   if (debug_print) {
     ESP_LOGI(kLogTag, "----- setTx timeoutInMs=%" PRIu32, timeoutInMs);
   }
@@ -821,7 +827,9 @@ void setTx(uint32_t timeoutInMs) {
   if ((getStatus() & 0x70) != 0x60) {
     ESP_LOGE(kLogTag, "setTx Illegal Status");
     error(ERR_INVALID_SETTX_STATE);
+    return false;
   }
+  return true;
 }
 
 void setTxEnable(void) {
@@ -871,6 +879,11 @@ bool waitForIdle(unsigned long timeout, char *text, bool stop) {
     esp_rom_delay_us(1);
   }
   if (gpio_get_level(kGpioBusy)) {
+    // `ret` sempre vira false aqui: antes, com error() hangando para sempre,
+    // não importava — a execução nunca voltava pra usar o `ret=true` default
+    // que o ramo `stop` deixava passar. Com error() apenas logando e
+    // retornando, esse `ret` desatualizado voltava a ser lido como sucesso
+    // (waitForIdle "Timeout" no log, mas retorno true) — corrigido.
     if (stop) {
       ESP_LOGE(
         kLogTag, "waitForIdle Timeout text=%s timeout=%lu start=%" PRIu32, text,
@@ -880,8 +893,8 @@ bool waitForIdle(unsigned long timeout, char *text, bool stop) {
       ESP_LOGW(
         kLogTag, "waitForIdle Timeout text=%s timeout=%lu start=%" PRIu32, text,
         timeout, start);
-      ret = false;
     }
+    ret = false;
   }
   return ret;
 }

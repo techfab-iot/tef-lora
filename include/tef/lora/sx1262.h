@@ -15,10 +15,14 @@ void init(
 int16_t begin(
   uint32_t frequencyInHz, int8_t txPowerInDbm, float tcxoVoltage,
   bool useRegulatorLDO);
-void config(
+// Retorna true se o chip confirmou entrada em RX ao final da configuração
+// (ver setRx()); false indica pinagem física errada ou chip não responde —
+// nesse caso o rádio não está de fato recebendo, mesmo que begin() tenha
+// reconhecido o chip antes.
+bool config(
   uint8_t spreadingFactor, uint8_t bandwidth, uint8_t codingRate,
   uint16_t preambleLength, uint8_t payloadLen, bool crcOn, bool invertIrq);
-void config(
+bool config(
   uint8_t spreadingFactor, tef::lora::Bandwidth bandwidth,
   tef::lora::CodingRate codingRate, uint16_t preambleLength,
   uint8_t payloadLen, bool crcOn, bool invertIrq);
@@ -70,8 +74,12 @@ uint16_t getDeviceErrors(void);
 void clearDeviceErrors(void);
 void setTxEnable(void);
 void setRxEnable(void);
-void setRx(uint32_t timeout);
-void setTx(uint32_t timeoutInMs);
+// Retorna true se o chip confirmou o modo (status bits [6:4]); false após
+// ERR_INVALID_SETRX_STATE/ERR_INVALID_SETTX_STATE — antes esses erros só
+// hangavam a task chamadora para sempre via error(), sem forma de o
+// chamador reagir.
+bool setRx(uint32_t timeout);
+bool setTx(uint32_t timeoutInMs);
 int getPacketLost();
 uint8_t getRssiInst();
 void getRxBufferStatus(uint8_t* payloadLength, uint8_t* rxStartBufferPointer);
