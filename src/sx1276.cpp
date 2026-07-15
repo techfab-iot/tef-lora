@@ -44,7 +44,7 @@ void writeReg(int reg, int val) {
   out[1] = val;
   uint8_t in[2];
 
-  spi_transaction_t t = {0};
+  spi_transaction_t t{};
   t.flags = 0;
   t.length = 8 * sizeof(out);
   t.tx_buffer = out;
@@ -73,7 +73,7 @@ void writeRegBuffer(int reg, uint8_t *val, int len) {
     out[i + 1] = val[i];
   }
 
-  spi_transaction_t t = {0};
+  spi_transaction_t t{};
   t.flags = 0;
   t.length = 8 * (len + 1);
   t.tx_buffer = out;
@@ -99,7 +99,7 @@ int readReg(int reg) {
   out[1] = 0xff;
   uint8_t in[2];
 
-  spi_transaction_t t = {0};
+  spi_transaction_t t{};
   t.flags = 0;
   t.length = 8 * sizeof(out);
   t.tx_buffer = out;
@@ -130,7 +130,7 @@ void readRegBuffer(int reg, uint8_t *val, int len) {
     out[i + 1] = 0xff;
   }
 
-  spi_transaction_t t = {0};
+  spi_transaction_t t{};
   t.flags = 0;
   t.length = 8 * (len + 1);
   t.tx_buffer = out;
@@ -449,7 +449,7 @@ int init(void) {
   gpio_set_direction((gpio_num_t)kGpioCs, GPIO_MODE_OUTPUT);
   gpio_set_level((gpio_num_t)kGpioCs, 1);
 
-  spi_bus_config_t bus = {0};
+  spi_bus_config_t bus{};
   bus.mosi_io_num = kGpioMosi;
   bus.miso_io_num = kGpioMiso;
   bus.sclk_io_num = kGpioSck;
@@ -461,7 +461,7 @@ int init(void) {
   ret = spi_bus_initialize(kHostId, &bus, SPI_DMA_CH_AUTO);
   assert(ret == ESP_OK);
 
-  spi_device_interface_config_t dev = {0};
+  spi_device_interface_config_t dev{};
   dev.mode = 0;
   dev.clock_speed_hz = clock_speed;
   dev.spics_io_num = kGpioCs;

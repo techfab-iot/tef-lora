@@ -113,7 +113,7 @@ void init(
     gpio_set_direction(kGpioRxen, GPIO_MODE_OUTPUT);
   }
 
-  spi_bus_config_t spi_bus_config = {0};
+  spi_bus_config_t spi_bus_config{};
   spi_bus_config.sclk_io_num = kGpioSck;
   spi_bus_config.mosi_io_num = kGpioMosi;
   spi_bus_config.miso_io_num = kGpioMiso;
