@@ -418,7 +418,11 @@ uint8_t receive(uint8_t *pData, int16_t len) {
 
   if (irqRegs & SX126X_IRQ_RX_DONE) {
     rxLen = readBuffer(pData, len);
-    ESP_LOGI(kLogTag, "RX_DONE irqRegs=0x%04x rxLen=%d", irqRegs, rxLen);
+    // INFO here would fire on every RX_DONE, including RF noise and
+    // frames the caller doesn't recognize — callers that can tell a valid
+    // application frame apart from noise log at INFO themselves once
+    // they've made that call.
+    ESP_LOGD(kLogTag, "RX_DONE irqRegs=0x%04x rxLen=%d", irqRegs, rxLen);
     clearIrqStatus(SX126X_IRQ_ALL);
     setRx(SX126X_RX_TIMEOUT_INF);
   } else if (irqRegs & SX126X_IRQ_CRC_ERR) {
