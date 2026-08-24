@@ -39,8 +39,8 @@ extern "C" void app_main() {
   constexpr auto pins = board::kLoraRadioPins;
   if (
     radio::init(
-      pins.rst, pins.nss, pins.sck, pins.miso, pins.mosi, pins.busy,
-      pins.dio1, pins.txen, pins.rxen) == 0) {
+      pins.rst, pins.nss, pins.sck, pins.miso, pins.mosi, GPIO_NUM_NC,
+      pins.dio[1], GPIO_NUM_NC, GPIO_NUM_NC) == 0) {
     ESP_LOGE(pcTaskGetName(NULL), "Does not recognize the module");
     while (1) {
       vTaskDelay(1);
