@@ -71,11 +71,13 @@ Na banda mais baixa (169MHz), BWs 8&9 não são suportados.
 
 O módulo de referência para o driver SX1262 é o **AI-Thinker RA-01SH** (915 MHz).
 
-## Configuração obrigatória
+## TCXO — opcional, depende do módulo
 
-O RA-01SH usa **TCXO de 1.8V** controlado via DIO3. Sem habilitar o TCXO, o chip fica travado em estado busy e não inicializa. O comutador RF interno é controlado via DIO2 (habilitado automaticamente pelo driver via `SetDio2AsRfSwitchCtrl`), sem necessidade de pino GPIO externo para TXEN/RXEN.
+O RA-01SH usa **TCXO de 1.8V** controlado via DIO3: passe `tcxoVoltage` > 0 em `begin()` (nos exemplos, `board::kLoraUseTcxo` + `board::kLoraTcxoVoltage`). Sem habilitar o TCXO num módulo que o exige, o chip fica travado em estado busy e não inicializa.
 
-Nos exemplos SX1262, `CONFIG_USE_TCXO=y` e `CONFIG_TCXO_VOLTAGE_MV=1800` são os padrões.
+Módulos SX1262 nus (sem TCXO na placa) devem passar `tcxoVoltage = 0` e rodam do XTAL de 32 MHz. Se `begin()` for chamado com TCXO mas o oscilador não partir (`SX126X_XOSC_START_ERR`), o driver faz reset e recai automaticamente para XTAL — mas o certo é declarar `tcxoVoltage = 0` desde o início para evitar o boot mais lento e o warning a cada partida.
+
+O comutador RF interno é controlado via DIO2 (habilitado automaticamente pelo driver via `SetDio2AsRfSwitchCtrl`), sem necessidade de pino GPIO externo para TXEN/RXEN.
 
 ## Interoperabilidade SX1276 ↔ SX1262
 
