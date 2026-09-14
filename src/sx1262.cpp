@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -878,9 +879,25 @@ bool waitForIdle(unsigned long timeout, char *text, bool stop) {
   bool ret = true;
   TickType_t start = xTaskGetTickCount();
   esp_rom_delay_us(1);
+  // BUSY normally deasserts within microseconds, so the first stretch busy-spins
+  // for tight latency. But when the radio is absent/unresponsive, BUSY never
+  // drops and this loop previously spun on esp_rom_delay_us() — which never
+  // yields to FreeRTOS — for the entire `timeout` (5000 ms via BUSY_WAIT in
+  // most callers). With waitForIdle() called repeatedly through init/calibrate/
+  // read/write, that starved IDLE0 long enough to trip the task watchdog on
+  // every call, leaving the whole device (console included) unresponsive
+  // without ever panicking or rebooting — found live on hardware with no LoRa
+  // radio connected (2026-08-25, techfab-iot/tef-lora#18). Past ~2 ms, fall
+  // back to vTaskDelay(1) so the timeout case degrades instead of hanging.
+  constexpr int64_t kBusySpinLimitUs = 2000;
+  const int64_t spin_start_us = esp_timer_get_time();
   while (xTaskGetTickCount() - start < (timeout / portTICK_PERIOD_MS)) {
     if (gpio_get_level(kGpioBusy) == 0) break;
-    esp_rom_delay_us(1);
+    if (esp_timer_get_time() - spin_start_us < kBusySpinLimitUs) {
+      esp_rom_delay_us(1);
+    } else {
+      vTaskDelay(1);
+    }
   }
   if (gpio_get_level(kGpioBusy)) {
     // `ret` sempre vira false aqui: antes, com error() hangando para sempre,
