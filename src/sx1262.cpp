@@ -300,7 +300,9 @@ int16_t begin(
 	setPaConfig(0x04, 0x07, 0x00, 0x01); // PA Optimal Settings +22 dBm
 #endif
   setPaConfig(0x04, 0x07, 0x00, 0x01);  // PA Optimal Settings +22 dBm
-  setOvercurrentProtection(60.0);       // current max 60mA for the whole device
+  // The reset OCP (60 mA) limits the whole device, which can cap the PA at
+  // +22 dBm. 140 mA is the register maximum.
+  setOvercurrentProtection(140.0);
   setPowerConfig(txPowerInDbm, SX126X_PA_RAMP_200U);  // 0 fuer Empfaenger
   setRfFrequency(frequencyInHz);
   return ERR_NONE;
