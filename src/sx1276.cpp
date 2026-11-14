@@ -200,16 +200,25 @@ void receive(void) {
 }
 
 /**
- * Configure power level for transmission
- * @param level 2-17, from least to most power
+ * Configure power level for transmission on the PA_BOOST pin
+ * @param level 2-17 dBm uses the default PA; 18-20 dBm enables the +20 dBm
+ *        high-power mode (RegPaDac and a raised OCP trim, per datasheet)
  */
 void setTxPower(int level) {
-  // RF9x module uses kPaBoost pin
   if (level < 2)
     level = 2;
-  else if (level > 17)
-    level = 17;
-  writeReg(kRegPaConfig, kPaBoost | (level - 2));
+  else if (level > 20)
+    level = 20;
+
+  if (level > 17) {
+    writeReg(kRegPaDac, kPaDacHighPower);
+    writeReg(kRegOcp, kOcpOn | kOcpTrimHighPower);
+    writeReg(kRegPaConfig, kPaBoost | (level - 5));
+  } else {
+    writeReg(kRegPaDac, kPaDacDefault);
+    writeReg(kRegOcp, kOcpOn | kOcpTrimDefault);
+    writeReg(kRegPaConfig, kPaBoost | (level - 2));
+  }
 }
 
 /**
