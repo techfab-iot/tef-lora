@@ -7,6 +7,7 @@ static constexpr int kRegFrfMsb = 0x06;
 static constexpr int kRegFrfMid = 0x07;
 static constexpr int kRegFrfLsb = 0x08;
 static constexpr int kRegPaConfig = 0x09;
+static constexpr int kRegOcp = 0x0b;
 static constexpr int kRegLna = 0x0c;
 static constexpr int kRegFifoAddrPtr = 0x0d;
 static constexpr int kRegFifoTxBaseAddr = 0x0e;
@@ -29,6 +30,7 @@ static constexpr int kRegSyncWord = 0x39;
 static constexpr int kRegDioMapping1 = 0x40;
 static constexpr int kRegDioMapping2 = 0x41;
 static constexpr int kRegVersion = 0x42;
+static constexpr int kRegPaDac = 0x4d;
 
 // Transceiver modes
 static constexpr int kModeLongRangeMode = 0x80;
@@ -40,6 +42,13 @@ static constexpr int kModeRxSingle = 0x06;
 
 // PA configuration
 static constexpr int kPaBoost = 0x80;
+// RegPaDac: 0x84 = default, 0x87 = +20 dBm enabled on PA_BOOST
+static constexpr int kPaDacDefault = 0x84;
+static constexpr int kPaDacHighPower = 0x87;
+// RegOcp: bit 5 enables OCP; trim 0x0B = 100 mA (reset), 0x1B = 240 mA
+static constexpr int kOcpOn = 0x20;
+static constexpr int kOcpTrimDefault = 0x0b;
+static constexpr int kOcpTrimHighPower = 0x1b;
 
 // IRQ masks
 static constexpr int kIrqTxDoneMask = 0x08;
