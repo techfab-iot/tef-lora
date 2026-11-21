@@ -1,5 +1,5 @@
 idf_component_register(
   SRCS "src/tef/lora.cpp" "src/sx1262.cpp" "src/sx1276.cpp"
-  REQUIRES driver esp_driver_spi esp_driver_gpio
+  REQUIRES driver esp_driver_spi esp_driver_gpio esp_timer
   INCLUDE_DIRS "include"
 )
